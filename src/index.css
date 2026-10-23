@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+:root {
+  --hud-cyan: #00f2fe;
+  --hud-emerald: #10b981;
+  --hud-amber: #f59e0b;
+  --hud-red: #ef4444;
+  --hud-dark: #070a11;
+  --hud-panel: rgba(11, 17, 30, 0.85);
+  --hud-border: rgba(0, 242, 254, 0.2);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'JetBrains Mono', monospace;
+  background-color: #070a11;
+  color: #e2e8f0;
+}
+
+.font-tactical {
+  font-family: 'Chakra Petch', sans-serif;
+}
+
+/* Custom Tactical Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(10, 16, 28, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 242, 254, 0.25);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 242, 254, 0.5);
+}
+
+/* Glassmorphism Tactical HUD Panels */
+.hud-panel {
+  background: rgba(8, 14, 26, 0.88);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 242, 254, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+}
+
+.hud-panel-danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
+}
+
+.hud-panel-warning {
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.1);
+}
+
+/* Tactical Corner Accents */
+.tactical-box {
+  position: relative;
+}
+.tactical-box::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid #00f2fe;
+  border-left: 2px solid #00f2fe;
+  pointer-events: none;
+}
+.tactical-box::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-bottom: 2px solid #00f2fe;
+  border-right: 2px solid #00f2fe;
+  pointer-events: none;
+}
+
+/* Leaflet Dark Mode Customizations */
+.leaflet-container {
+  background-color: #060910 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+.leaflet-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: rgba(8, 14, 26, 0.95) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(0, 242, 254, 0.3) !important;
+  border-radius: 4px !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7) !important;
+}
+
+.leaflet-popup-tip {
+  background: rgba(8, 14, 26, 0.95) !important;
+}
+
+/* Pulse Animations */
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+}
+
+.radar-ping {
+  animation: radar-pulse 2.2s infinite ease-out;
+}
+
+/* Tactical Night Filter for Map Tiles */
+.map-style-tactical .leaflet-tile-pane {
+  filter: brightness(0.68) invert(1) contrast(1.75) hue-rotate(205deg) saturate(0.45);
+}
+
+.map-style-streets .leaflet-tile-pane {
+  filter: none !important;
+}
+
+.map-style-topo .leaflet-tile-pane {
+  filter: contrast(1.1) brightness(0.95);
+}
+
+.map-style-satellite .leaflet-tile-pane {
+  filter: contrast(1.15) brightness(0.9);
+}
+
+/* Town HUD Badges */
+.town-badge {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.town-badge:hover {
+  transform: scale(1.1);
+  z-index: 999 !important;
+}
