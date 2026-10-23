@@ -27,6 +27,7 @@ import {
   getSchoolBusAlerts,
   NORTH_PERTH_COORDS,
 } from './services/api';
+import { Layers, Activity, X } from 'lucide-react';
 
 export function App() {
   // 511 API Key state (defaults to user's registered key)
@@ -37,6 +38,9 @@ export function App() {
     );
   });
   const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
+
+  // Mobile drawer states: 'none' | 'layers' | 'intel'
+  const [mobileDrawer, setMobileDrawer] = useState<'none' | 'layers' | 'intel'>('none');
 
   // Layer visibility state
   const [layers, setLayers] = useState<ActiveLayers>({
@@ -108,7 +112,6 @@ export function App() {
 
   useEffect(() => {
     refreshAllFeeds();
-    // Fast telemetry poll for aircraft & weather every 20 seconds
     const interval = setInterval(refreshAllFeeds, 20000);
     return () => clearInterval(interval);
   }, [refreshAllFeeds]);
@@ -121,14 +124,21 @@ export function App() {
   };
 
   const handleRecenter = () => {
-    // Reload / trigger window dispatch for map reset if needed
     window.location.reload();
+  };
+
+  const handleSelectFlight = (flight: FlightData | null) => {
+    setSelectedFlight(flight);
+    if (flight) {
+      // Close drawer on mobile so user sees the aircraft on map
+      setMobileDrawer('none');
+    }
   };
 
   const activeLayersCount = Object.values(layers).filter(Boolean).length;
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#070a11] text-slate-100 select-none">
+    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[#070a11] text-slate-100 select-none">
       {/* Top HUD Bar */}
       <HeaderHUD
         weather={weather}
@@ -148,19 +158,21 @@ export function App() {
         currentKey={apiKey}
       />
 
-      {/* Main Workspace: Left Layers | Central Map | Right Sitrep */}
+      {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Layer Control */}
-        <LayerControlPanel
-          layers={layers}
-          onToggleLayer={handleToggleLayer}
-          radarOpacity={radarOpacity}
-          onChangeRadarOpacity={setRadarOpacity}
-          flightCount={flights.length}
-        />
+        {/* DESKTOP Left Layer Control */}
+        <div className="hidden lg:flex flex-shrink-0">
+          <LayerControlPanel
+            layers={layers}
+            onToggleLayer={handleToggleLayer}
+            radarOpacity={radarOpacity}
+            onChangeRadarOpacity={setRadarOpacity}
+            flightCount={flights.length}
+          />
+        </div>
 
-        {/* Central Tactical Map HUD */}
-        <main className="flex-1 relative h-full overflow-hidden">
+        {/* Central Tactical Map (Full screen on mobile) */}
+        <main className="flex-1 relative h-full w-full overflow-hidden">
           <MapView
             layers={layers}
             flights={flights}
@@ -169,35 +181,117 @@ export function App() {
             roads={roads}
             outages={outages}
             selectedFlight={selectedFlight}
-            onSelectFlight={setSelectedFlight}
+            onSelectFlight={handleSelectFlight}
             radarOpacity={radarOpacity}
           />
 
-          {/* Quick Tactical Overlays */}
-          <div className="absolute top-3 left-4 z-10 pointer-events-none flex items-center gap-2">
-            <div className="px-2.5 py-1 rounded bg-slate-950/85 border border-cyan-500/30 font-mono text-[11px] text-cyan-300 backdrop-blur-sm">
-              <span className="text-slate-500">SECTOR:</span> NORTH PERTH [LISTOWEL]
-            </div>
-            {layers.radar && (
-              <div className="px-2 py-1 rounded bg-cyan-950/80 border border-cyan-500/40 font-mono text-[10px] text-cyan-400 backdrop-blur-sm flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
-                EXETER DOPPLER ACTIVE
-              </div>
-            )}
+          {/* Mobile Quick Floating Drawer Toggles (Top Corners) */}
+          <div className="lg:hidden absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+            <button
+              onClick={() => setMobileDrawer((prev) => (prev === 'layers' ? 'none' : 'layers'))}
+              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-cyan-500/50 text-cyan-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform"
+            >
+              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Layers</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            </button>
+
+            <button
+              onClick={() => setMobileDrawer((prev) => (prev === 'intel' ? 'none' : 'intel'))}
+              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform"
+            >
+              <Activity className="w-3.5 h-3.5 text-amber-400" />
+              <span>Sitrep / Planes ({flights.length})</span>
+            </button>
           </div>
         </main>
 
-        {/* Right Intelligence Sitrep & Airspace Panel */}
-        <RightIntelPanel
-          weather={weather}
-          riverGauges={riverGauges}
-          flights={flights}
-          outages={outages}
-          dispatches={dispatches}
-          buses={buses}
-          selectedFlight={selectedFlight}
-          onSelectFlight={setSelectedFlight}
-        />
+        {/* DESKTOP Right Intel Panel */}
+        <div className="hidden lg:flex flex-shrink-0">
+          <RightIntelPanel
+            weather={weather}
+            riverGauges={riverGauges}
+            flights={flights}
+            outages={outages}
+            dispatches={dispatches}
+            buses={buses}
+            selectedFlight={selectedFlight}
+            onSelectFlight={handleSelectFlight}
+          />
+        </div>
+
+        {/* MOBILE Slide-out Overlay Drawer (Layers) */}
+        {mobileDrawer === 'layers' && (
+          <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
+            <div
+              className="absolute inset-0"
+              onClick={() => setMobileDrawer('none')}
+            />
+            <div className="relative z-50 w-full max-h-[80dvh] flex flex-col bg-slate-950 border-t border-cyan-500/40 shadow-2xl animate-slide-up rounded-t-xl overflow-hidden">
+              <div className="flex items-center justify-between p-3 border-b border-cyan-500/20 bg-slate-900/80">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-cyan-400" />
+                  <span className="font-tactical text-sm font-bold text-white tracking-wider">
+                    INTELLIGENCE LAYERS
+                  </span>
+                </div>
+                <button
+                  onClick={() => setMobileDrawer('none')}
+                  className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <LayerControlPanel
+                  layers={layers}
+                  onToggleLayer={handleToggleLayer}
+                  radarOpacity={radarOpacity}
+                  onChangeRadarOpacity={setRadarOpacity}
+                  flightCount={flights.length}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MOBILE Slide-out Overlay Drawer (Intel / Sitrep / Airspace) */}
+        {mobileDrawer === 'intel' && (
+          <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
+            <div
+              className="absolute inset-0"
+              onClick={() => setMobileDrawer('none')}
+            />
+            <div className="relative z-50 w-full max-h-[82dvh] flex flex-col bg-slate-950 border-t border-amber-500/40 shadow-2xl animate-slide-up rounded-t-xl overflow-hidden">
+              <div className="flex items-center justify-between p-3 border-b border-amber-500/20 bg-slate-900/80">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-amber-400" />
+                  <span className="font-tactical text-sm font-bold text-white tracking-wider">
+                    SITREP & AIRSPACE
+                  </span>
+                </div>
+                <button
+                  onClick={() => setMobileDrawer('none')}
+                  className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <RightIntelPanel
+                  weather={weather}
+                  riverGauges={riverGauges}
+                  flights={flights}
+                  outages={outages}
+                  dispatches={dispatches}
+                  buses={buses}
+                  selectedFlight={selectedFlight}
+                  onSelectFlight={handleSelectFlight}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

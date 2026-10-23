@@ -150,7 +150,15 @@ export const MapView: React.FC<MapProps> = ({
 
     mapInstanceRef.current = map;
 
+    // Ensure map tiles calculate correct pixel sizes on mobile and orientation changes
+    const handleResize = () => {
+      map.invalidateSize();
+    };
+    window.addEventListener('resize', handleResize);
+    setTimeout(handleResize, 150);
+
     return () => {
+      window.removeEventListener('resize', handleResize);
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -534,57 +542,57 @@ export const MapView: React.FC<MapProps> = ({
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
       {/* Map Style Selector Bar */}
-      <div className="absolute bottom-5 left-5 z-20 flex flex-wrap items-center bg-slate-950/95 border border-cyan-500/40 rounded p-1 font-mono text-xs backdrop-blur-md shadow-2xl gap-1">
-        <span className="text-[10px] text-slate-500 px-2 uppercase tracking-wider hidden sm:inline">
-          MAP STYLE:
+      <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:bottom-5 sm:left-5 z-20 flex flex-wrap items-center bg-slate-950/95 border border-cyan-500/40 rounded p-1 font-mono text-[10px] sm:text-xs backdrop-blur-md shadow-2xl gap-1 max-w-[calc(100vw-24px)] overflow-x-auto">
+        <span className="text-[9px] text-slate-500 px-1.5 uppercase tracking-wider hidden md:inline">
+          STYLE:
         </span>
         <button
           onClick={() => setMapStyle('streets')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all font-semibold ${
+          className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded transition-all font-semibold whitespace-nowrap ${
             mapStyle === 'streets'
               ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_#00f2fe]'
               : 'text-slate-300 hover:text-white hover:bg-slate-900'
           }`}
         >
-          <MapPin className="w-3.5 h-3.5" />
-          STREETS & TOWNS
+          <MapPin className="w-3 h-3" />
+          STREETS
         </button>
         <button
           onClick={() => setMapStyle('tactical')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all font-semibold ${
+          className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded transition-all font-semibold whitespace-nowrap ${
             mapStyle === 'tactical'
               ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_#00f2fe]'
               : 'text-slate-300 hover:text-white hover:bg-slate-900'
           }`}
         >
-          <Layers className="w-3.5 h-3.5" />
-          TACTICAL NIGHT
+          <Layers className="w-3 h-3" />
+          TACTICAL
         </button>
         <button
           onClick={() => setMapStyle('satellite')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all font-semibold ${
+          className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded transition-all font-semibold whitespace-nowrap ${
             mapStyle === 'satellite'
               ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_#00f2fe]'
               : 'text-slate-300 hover:text-white hover:bg-slate-900'
           }`}
         >
-          <Navigation2 className="w-3.5 h-3.5" />
-          HYBRID SATELLITE
+          <Navigation2 className="w-3 h-3" />
+          SATELLITE
         </button>
         <button
           onClick={() => setMapStyle('topo')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all font-semibold ${
+          className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded transition-all font-semibold whitespace-nowrap ${
             mapStyle === 'topo'
               ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_#00f2fe]'
               : 'text-slate-300 hover:text-white hover:bg-slate-900'
           }`}
         >
-          <Mountain className="w-3.5 h-3.5" />
-          TOPOGRAPHIC
+          <Mountain className="w-3 h-3" />
+          TOPO
         </button>
 
         {/* Subtle Sector Selector */}
-        <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
+        <div className="h-3 w-px bg-slate-800 mx-0.5 hidden sm:block" />
         <select
           onChange={(e) => {
             const town = NORTH_PERTH_TOWNS.find((t) => t.id === e.target.value);
@@ -592,14 +600,14 @@ export const MapView: React.FC<MapProps> = ({
             e.target.value = '';
           }}
           defaultValue=""
-          className="bg-slate-900 border border-slate-700/80 rounded px-2 py-1 text-[11px] text-slate-300 font-mono hover:border-cyan-500/50 focus:outline-none cursor-pointer"
+          className="bg-slate-900 border border-slate-700/80 rounded px-1.5 py-1 text-[10px] sm:text-[11px] text-slate-300 font-mono hover:border-cyan-500/50 focus:outline-none cursor-pointer max-w-[120px] sm:max-w-none"
         >
           <option value="" disabled>
-            SECTOR FOCUS...
+            SECTOR...
           </option>
           {NORTH_PERTH_TOWNS.map((town) => (
             <option key={town.id} value={town.id}>
-              {town.name} ({town.sector.split('//')[0].trim()})
+              {town.name}
             </option>
           ))}
         </select>
