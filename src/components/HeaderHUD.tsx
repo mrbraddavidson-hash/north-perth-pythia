@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Compass,
   Clock,
@@ -6,9 +6,12 @@ import {
   Gauge,
   Crosshair,
   Maximize2,
+  Minimize2,
   RefreshCw,
   Activity,
   Key,
+  Tv,
+  AlertTriangle,
 } from 'lucide-react';
 import { WeatherTelemetry } from '../services/types';
 
@@ -20,6 +23,7 @@ interface HeaderHUDProps {
   activeLayersCount: number;
   hasApiKey: boolean;
   onOpenKeyModal: () => void;
+  criticalAlert?: string | null;
 }
 
 export const HeaderHUD: React.FC<HeaderHUDProps> = ({
@@ -30,9 +34,12 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   activeLayersCount,
   hasApiKey,
   onOpenKeyModal,
+  criticalAlert,
 }) => {
   const [timeUtc, setTimeUtc] = useState<string>('');
   const [timeLocal, setTimeLocal] = useState<string>('');
+  const [isKiosk, setIsKiosk] = useState<boolean>(false);
+  const wakeLockRef = useRef<any>(null);
 
   useEffect(() => {
     const updateTime = () => {
@@ -50,11 +57,49 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
+  // Screen Wake Lock API for Wall Mount / Kiosk Mode
+  useEffect(() => {
+    const handleFullscreenChange = async () => {
+      const isFs = !!document.fullscreenElement;
+      setIsKiosk(isFs);
+      if (isFs) {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+          }
+        } catch (e) {
+          console.warn('Wake Lock request failed:', e);
+        }
+      } else {
+        if (wakeLockRef.current) {
+          try {
+            await wakeLockRef.current.release();
+          } catch {}
+          wakeLockRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      if (wakeLockRef.current) {
+        try {
+          wakeLockRef.current.release();
+        } catch {}
+      }
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.warn('Fullscreen request failed:', err);
     }
   };
 
@@ -75,6 +120,12 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
               LIVE
             </span>
+            {isKiosk && (
+              <span className="hidden lg:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-mono tracking-widest bg-cyan-950/80 text-cyan-300 border border-cyan-500/50 shadow-[0_0_8px_#00f2fe]">
+                <Tv className="w-2.5 h-2.5 text-cyan-400" />
+                KIOSK (WAKELOCK)
+              </span>
+            )}
           </div>
           <div className="hidden sm:flex items-center gap-2 text-[10px] md:text-[11px] font-mono text-slate-400">
             <span className="flex items-center gap-1 text-cyan-300/80">
@@ -88,6 +139,14 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Critical Alert Bar in Center if active */}
+      {criticalAlert && (
+        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-950/80 border border-rose-500/70 text-rose-300 text-[11px] font-mono shadow-[0_0_12px_rgba(239,68,68,0.3)] animate-pulse">
+          <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+          <span className="font-bold tracking-wider">{criticalAlert}</span>
+        </div>
+      )}
 
       {/* Right Controls & Telemetry */}
       <div className="flex items-center gap-1.5 md:gap-3 font-mono text-xs flex-shrink-0">
@@ -129,14 +188,14 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
           <button
             onClick={onRecenter}
             title="Recenter Map on Listowel"
-            className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/50 transition-colors min-h-[32px] min-w-[32px] flex items-center justify-center"
+            className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/50 transition-colors min-h-[32px] min-w-[32px] flex items-center justify-center cursor-pointer"
           >
             <Crosshair className="w-3.5 h-3.5 md:w-4 md:h-4" />
           </button>
           <button
             onClick={onRefresh}
             title="Refresh Real-time Telemetry"
-            className={`p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/50 transition-colors min-h-[32px] min-w-[32px] flex items-center justify-center ${
+            className={`p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/50 transition-colors min-h-[32px] min-w-[32px] flex items-center justify-center cursor-pointer ${
               isRefreshing ? 'animate-spin text-cyan-400' : ''
             }`}
           >
@@ -144,10 +203,18 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
           </button>
           <button
             onClick={toggleFullscreen}
-            title="Toggle Tactical Fullscreen HUD"
-            className="hidden sm:flex p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/50 transition-colors min-h-[32px] min-w-[32px] items-center justify-center"
+            title={isKiosk ? 'Exit Fullscreen Kiosk' : 'Enter Tactical Kiosk Mode (Screen WakeLock Active)'}
+            className={`hidden sm:flex p-1.5 rounded transition-colors min-h-[32px] min-w-[32px] items-center justify-center cursor-pointer ${
+              isKiosk
+                ? 'bg-cyan-500 text-slate-950 border border-cyan-400 shadow-[0_0_12px_#00f2fe]'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/50'
+            }`}
           >
-            <Maximize2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            {isKiosk ? (
+              <Minimize2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            )}
           </button>
         </div>
       </div>

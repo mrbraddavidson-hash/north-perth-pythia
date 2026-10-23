@@ -126,3 +126,32 @@ export interface ActiveLayers {
   buses: boolean;
   satellites: boolean;
 }
+
+export interface MvcaWatershedBulletin {
+  status: 'NORMAL' | 'CONDITIONS_STATEMENT' | 'FLOOD_WATCH' | 'FLOOD_WARNING';
+  headline: string;
+  issuedDate: string;
+  middleMaitlandRisk: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  details: string;
+  activeWatercourse: string;
+}
+
+export interface WeatherAlert {
+  id: string;
+  type: 'WARNING' | 'WATCH' | 'SPECIAL_STATEMENT' | 'ADVISORY' | 'NORMAL';
+  title: string;
+  severity: 'CRITICAL' | 'ELEVATED' | 'INFO';
+  issuedTime: string;
+  description: string;
+}
+
+export interface MunicipalNotice {
+  id: string;
+  category: 'INFRASTRUCTURE' | 'ROAD_CLOSURE' | 'WATER_WORKS' | 'WINTER_PATROL';
+  title: string;
+  location: string;
+  status: 'ACTIVE' | 'SCHEDULED' | 'ADVISORY';
+  date: string;
+  details: string;
+}
+

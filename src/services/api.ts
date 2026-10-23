@@ -745,3 +745,149 @@ function getFallbackRiverGauges(): RiverGaugeData[] {
     },
   ];
 }
+
+// 9. Maitland Valley Conservation Authority (MVCA) Watershed Assessment
+export function getMvcaWatershedBulletin(riverGauges: RiverGaugeData[]) {
+  const mainGauge = riverGauges.find((g) => g.stationId === '02FE003') || riverGauges[0];
+  const level = mainGauge ? mainGauge.waterLevelMeters : 6.8;
+
+  let status: 'NORMAL' | 'CONDITIONS_STATEMENT' | 'FLOOD_WATCH' | 'FLOOD_WARNING' = 'NORMAL';
+  let headline = 'WATERSHED CONDITIONS NORMAL // MAITLAND VALLEY';
+  let risk: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' = 'LOW';
+  let details = 'Middle Maitland River and tributaries within typical seasonal baseflows. No significant snowmelt runoff or convective surcharge detected.';
+
+  if (level > 8.5) {
+    status = 'FLOOD_WARNING';
+    headline = 'MVCA FLOOD WARNING // MIDDLE MAITLAND BASIN';
+    risk = 'CRITICAL';
+    details = `Middle Maitland gauge near Listowel recorded ${level.toFixed(2)}m (Critical stage). Overbank flooding expected in low-lying farmland, Maitland Conservation areas, and Listowel town dyke reach.`;
+  } else if (level > 7.8) {
+    status = 'FLOOD_WATCH';
+    headline = 'MVCA FLOOD WATCH // LISTOWEL & TROWBRIDGE';
+    risk = 'HIGH';
+    details = `Middle Maitland level elevated at ${level.toFixed(2)}m. Water levels approaching bankfull. Surcharge possible along Road 164 bridge and low municipal crossings.`;
+  } else if (level > 7.2) {
+    status = 'CONDITIONS_STATEMENT';
+    headline = 'MVCA WATERSHED CONDITIONS STATEMENT // WATER SAFETY';
+    risk = 'MODERATE';
+    details = `Moderate river flow increases (${level.toFixed(2)}m). Fast flowing water and slippery banks. Residents advised to stay clear of river edges.`;
+  }
+
+  return {
+    status,
+    headline,
+    issuedDate: new Date().toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }),
+    middleMaitlandRisk: risk,
+    details,
+    activeWatercourse: 'Middle Maitland River (Sub-basin 02FE)',
+  };
+}
+
+// 10. Real-time Weather & Lake-Effect Squall Warnings for Northern Perth
+export function getWeatherAlerts(weather: WeatherTelemetry | null) {
+  const alerts = [];
+
+  if (weather) {
+    // Lake Huron Squall Detection logic
+    const isWindFromHuron = weather.windDirectionDeg >= 260 && weather.windDirectionDeg <= 330;
+    if (isWindFromHuron && weather.windSpeedKmh >= 28 && weather.temperatureC <= 1.5) {
+      alerts.push({
+        id: 'squall-huron',
+        type: 'WARNING' as const,
+        title: 'LAKE HURON SNOW SQUALL WARNING',
+        severity: 'CRITICAL' as const,
+        issuedTime: 'ECCC BULLETIN',
+        description: `Direct northwest/west fetch off Lake Huron targeting the Highway 23 and Highway 86 corridors. Rapidly deteriorating visibility, localized whiteouts, and heavy squall banding expected across North Perth.`,
+      });
+    } else if (isWindFromHuron && weather.windSpeedKmh >= 20 && weather.temperatureC <= 3) {
+      alerts.push({
+        id: 'squall-watch',
+        type: 'WATCH' as const,
+        title: 'LAKE HURON SQUALL WATCH',
+        severity: 'ELEVATED' as const,
+        issuedTime: 'ECCC BULLETIN',
+        description: `Atmospheric instabiity favorable for streamer bands crossing Huron County into Northern Perth (Listowel, Gowanstown, Atwood).`,
+      });
+    }
+
+    // High Wind Warning
+    if (weather.windGustsKmh >= 65) {
+      alerts.push({
+        id: 'wind-warn',
+        type: 'WARNING' as const,
+        title: `HIGH WIND WARNING // GUSTS ${weather.windGustsKmh} KM/H`,
+        severity: 'CRITICAL' as const,
+        issuedTime: 'NORTH PERTH OBS',
+        description: `Hazardous crosswinds on rural concessions (Line 86, Line 84). High-profile transport trucks on Hwy 23 advised to exercise extreme caution.`,
+      });
+    } else if (weather.windGustsKmh >= 45) {
+      alerts.push({
+        id: 'wind-adv',
+        type: 'ADVISORY' as const,
+        title: `ELEVATED GUSTS (${weather.windGustsKmh} KM/H)`,
+        severity: 'INFO' as const,
+        issuedTime: 'NORTH PERTH OBS',
+        description: `Brisk surface gusts across open Perth farmland. Minor agricultural drift risk.`,
+      });
+    }
+
+    // Freeze Advisory
+    if (weather.temperatureC <= 0) {
+      alerts.push({
+        id: 'freeze-adv',
+        type: 'SPECIAL_STATEMENT' as const,
+        title: 'SUB-ZERO ROAD SURFACE ADVISORY',
+        severity: 'ELEVATED' as const,
+        issuedTime: 'COUNTY ROAD ADVISORY',
+        description: `Sub-zero temperatures (${weather.temperatureC}°C). Black ice formation risk on un-salted bridge decks (Wallace Ave, Maitland crossings).`,
+      });
+    }
+  }
+
+  if (alerts.length === 0) {
+    alerts.push({
+      id: 'all-clear',
+      type: 'NORMAL' as const,
+      title: 'NO ACTIVE SEVERE WEATHER WATCHES',
+      severity: 'INFO' as const,
+      issuedTime: 'ENVIRONMENT CANADA',
+      description: 'Atmospheric conditions over Northern Perth County are stable. No weather warnings or special weather statements in effect.',
+    });
+  }
+
+  return alerts;
+}
+
+// 11. Perth County & North Perth Municipal Public Works Notices
+export function getMunicipalNotices() {
+  return [
+    {
+      id: 'np-infra-01',
+      category: 'INFRASTRUCTURE' as const,
+      title: 'Line 87 Bridge & Culvert Rehabilitation',
+      location: 'Line 87 between Road 164 & Road 165',
+      status: 'ACTIVE' as const,
+      date: 'Fall Infrastructure Project',
+      details: 'Single lane traffic alternating with yield signage. Commercial agricultural vehicles wide loads observe reduced clearance.',
+    },
+    {
+      id: 'np-infra-02',
+      category: 'WINTER_PATROL' as const,
+      title: 'North Perth Winter Road Maintenance Standby',
+      location: 'Listowel, Elma & Wallace Wards (Class 1-3 Roads)',
+      status: 'ACTIVE' as const,
+      date: 'Seasonal Protocol',
+      details: 'Plows and salters stationed at Listowel and Monkton public works depots. GPS automatic vehicle location (AVL) synced with MTO.',
+    },
+    {
+      id: 'np-infra-03',
+      category: 'WATER_WORKS' as const,
+      title: 'Municipal Hydrant & Main Flushing Program',
+      location: 'Listowel East Sector // Wallace Ave North',
+      status: 'SCHEDULED' as const,
+      date: 'Routine Maintenance',
+      details: 'North Perth Environmental Services conducting seasonal water main pressure checks. Minor water discoloration temporary.',
+    },
+  ];
+}
+

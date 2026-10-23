@@ -27,6 +27,7 @@ interface MapProps {
   squallTrajectory?: SquallTrajectory | null;
   iss?: IssTelemetry | null;
   incidents?: LiveIncidentEvent[];
+  onApplyPreset?: (preset: 'all' | 'weather' | 'corridors' | 'airspace') => void;
 }
 
 type MapStyle = 'tactical' | 'streets' | 'satellite' | 'topo';
@@ -44,6 +45,7 @@ export const MapView: React.FC<MapProps> = ({
   squallTrajectory,
   iss,
   incidents = [],
+  onApplyPreset,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -754,6 +756,39 @@ export const MapView: React.FC<MapProps> = ({
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+      {/* Top Floating Quick Preset Bar */}
+      {onApplyPreset && (
+        <div className="absolute top-3 left-3 sm:left-4 z-20 flex items-center gap-1.5 p-1 rounded bg-slate-950/90 border border-cyan-500/40 backdrop-blur-md font-mono text-[10px] shadow-2xl overflow-x-auto max-w-[calc(100vw-32px)]">
+          <span className="text-[9px] text-slate-500 px-1 font-semibold uppercase tracking-wider hidden sm:inline">
+            PRESETS:
+          </span>
+          <button
+            onClick={() => onApplyPreset('all')}
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-cyan-500/50 cursor-pointer transition-all whitespace-nowrap"
+          >
+            ALL
+          </button>
+          <button
+            onClick={() => onApplyPreset('weather')}
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-cyan-200 border border-slate-800 hover:border-cyan-500/50 cursor-pointer transition-all whitespace-nowrap"
+          >
+            WEATHER & SQUALL
+          </button>
+          <button
+            onClick={() => onApplyPreset('corridors')}
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-amber-200 border border-slate-800 hover:border-amber-500/50 cursor-pointer transition-all whitespace-nowrap"
+          >
+            HWY 23 / 86
+          </button>
+          <button
+            onClick={() => onApplyPreset('airspace')}
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-300 hover:text-emerald-200 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all whitespace-nowrap"
+          >
+            AIRSPACE
+          </button>
+        </div>
+      )}
 
       {/* Map Style Selector Bar */}
       <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:bottom-5 sm:left-5 z-20 flex flex-wrap items-center bg-slate-950/95 border border-cyan-500/40 rounded p-1 font-mono text-[10px] sm:text-xs backdrop-blur-md shadow-2xl gap-1 max-w-[calc(100vw-24px)] overflow-x-auto">

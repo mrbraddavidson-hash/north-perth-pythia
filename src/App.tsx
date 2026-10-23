@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { HeaderHUD } from './components/HeaderHUD';
 import { LayerControlPanel } from './components/LayerControlPanel';
 import { RightIntelPanel } from './components/RightIntelPanel';
@@ -178,6 +178,93 @@ export function App() {
 
   const activeLayersCount = Object.values(layers).filter(Boolean).length;
 
+  const criticalAlert = useMemo(() => {
+    const ornge = flights.find((f) => f.callsign.includes('ORNGE') || f.callsign.includes('MEDEVAC'));
+    if (ornge && ornge.distanceKmToListowel < 25) {
+      return `ORNGE MEDEVAC INBOUND // ${ornge.distanceKmToListowel}KM`;
+    }
+    const closure = incidents.find((i) => i.isFullClosure);
+    if (closure) {
+      return `HIGHWAY CLOSURE: ${closure.road.toUpperCase()}`;
+    }
+    const mainRiver = riverGauges.find((g) => g.stationId === '02FE003');
+    if (mainRiver && mainRiver.floodStageAlert !== 'NORMAL') {
+      return `MAITLAND RIVER ${mainRiver.floodStageAlert} // ${mainRiver.waterLevelMeters.toFixed(2)}M`;
+    }
+    if (weather && weather.windGustsKmh >= 60) {
+      return `HIGH WIND GUSTS: ${weather.windGustsKmh} KM/H`;
+    }
+    return null;
+  }, [flights, incidents, riverGauges, weather]);
+
+  const handleApplyPreset = (preset: 'all' | 'weather' | 'corridors' | 'airspace') => {
+    if (preset === 'all') {
+      setLayers({
+        towns: true,
+        radar: true,
+        squall: true,
+        flights: true,
+        helipad: true,
+        river: true,
+        cams: true,
+        roads: true,
+        weather: true,
+        hydro: true,
+        dispatches: true,
+        buses: true,
+        satellites: true,
+      });
+    } else if (preset === 'weather') {
+      setLayers({
+        towns: true,
+        radar: true,
+        squall: true,
+        flights: false,
+        helipad: false,
+        river: true,
+        cams: false,
+        roads: false,
+        weather: true,
+        hydro: false,
+        dispatches: false,
+        buses: false,
+        satellites: false,
+      });
+    } else if (preset === 'corridors') {
+      setLayers({
+        towns: true,
+        radar: false,
+        squall: false,
+        flights: false,
+        helipad: false,
+        river: false,
+        cams: true,
+        roads: true,
+        weather: false,
+        hydro: true,
+        dispatches: true,
+        buses: true,
+        satellites: false,
+      });
+    } else if (preset === 'airspace') {
+      setLayers({
+        towns: true,
+        radar: false,
+        squall: false,
+        flights: true,
+        helipad: true,
+        river: false,
+        cams: false,
+        roads: false,
+        weather: false,
+        hydro: false,
+        dispatches: false,
+        buses: false,
+        satellites: true,
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[#070a11] text-slate-100 select-none">
       {/* Top HUD Bar */}
@@ -189,6 +276,7 @@ export function App() {
         activeLayersCount={activeLayersCount}
         hasApiKey={Boolean(apiKey)}
         onOpenKeyModal={() => setIsKeyModalOpen(true)}
+        criticalAlert={criticalAlert}
       />
 
       {/* Space Weather & Aurora Kp Ticker */}
@@ -237,6 +325,7 @@ export function App() {
             squallTrajectory={squallTrajectory}
             iss={iss}
             incidents={incidents}
+            onApplyPreset={handleApplyPreset}
           />
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
