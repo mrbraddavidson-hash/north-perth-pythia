@@ -405,12 +405,22 @@ export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncide
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          // Filter to Perth County & surrounding regional corridors (radius ~75km from Listowel)
+          // Filter to Perth County & surrounding regional corridors (radius ~95km from Listowel + corridor text matching)
           const localEvents = data.filter((e: any) => {
             const lat = Number(e.Latitude);
             const lon = Number(e.Longitude);
-            if (!lat || !lon) return false;
-            return lat >= 43.15 && lat <= 44.25 && lon >= -81.85 && lon <= -80.25;
+            const text = `${e.Description || ''} ${e.RoadwayName || ''}`.toLowerCase();
+            const inBox = lat >= 43.0 && lat <= 44.5 && lon >= -82.0 && lon <= -80.0;
+            const isPerthCorridor =
+              text.includes('perth') ||
+              text.includes('listowel') ||
+              text.includes('stratford') ||
+              text.includes('huron') ||
+              text.includes('hwy 23') ||
+              text.includes('hwy 86') ||
+              text.includes('highway 23') ||
+              text.includes('highway 86');
+            return inBox || isPerthCorridor;
           });
 
           return localEvents

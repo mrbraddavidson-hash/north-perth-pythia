@@ -88,16 +88,7 @@ export function App() {
   const refreshAllFeeds = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [
-        flightsData,
-        riverData,
-        weatherData,
-        camsData,
-        roadsData,
-        auroraData,
-        issData,
-        incidentsData,
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         fetchLiveFlights(),
         fetchRiverGauges(),
         fetchWeatherTelemetry(),
@@ -108,24 +99,25 @@ export function App() {
         fetchLive511Incidents(apiKey),
       ]);
 
-      setFlights(flightsData);
-      setRiverGauges(riverData);
-      setWeather(weatherData);
-      setCameras(camsData);
-      setRoads(roadsData);
-      setAurora(auroraData);
-      setIss(issData);
-      setIncidents(incidentsData);
-
-      // Compute squall trajectory based on live wind and temperature
-      if (weatherData) {
-        const squall = calculateSquallTrajectory(
-          weatherData.windDirectionDeg,
-          weatherData.windSpeedKmh,
-          weatherData.temperatureC
-        );
-        setSquallTrajectory(squall);
+      if (results[0].status === 'fulfilled') setFlights(results[0].value);
+      if (results[1].status === 'fulfilled') setRiverGauges(results[1].value);
+      if (results[2].status === 'fulfilled') {
+        const weatherData = results[2].value;
+        setWeather(weatherData);
+        if (weatherData) {
+          const squall = calculateSquallTrajectory(
+            weatherData.windDirectionDeg,
+            weatherData.windSpeedKmh,
+            weatherData.temperatureC
+          );
+          setSquallTrajectory(squall);
+        }
       }
+      if (results[3].status === 'fulfilled') setCameras(results[3].value);
+      if (results[4].status === 'fulfilled') setRoads(results[4].value);
+      if (results[5].status === 'fulfilled') setAurora(results[5].value);
+      if (results[6].status === 'fulfilled') setIss(results[6].value);
+      if (results[7].status === 'fulfilled') setIncidents(results[7].value);
 
       // Local municipal & safety feeds
       setOutages(getHydroOutages());

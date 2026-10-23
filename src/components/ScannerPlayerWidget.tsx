@@ -1,57 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Radio, Volume2, VolumeX, Play, Square, Signal } from 'lucide-react';
 
-// Direct, open, unblocked 24/7 live public safety scanner audio stream
-// Streams continuously over HTTPS with Access-Control-Allow-Origin: * and zero ads
-const LIVE_SCANNER_STREAM_URL = 'https://ice1.somafm.com/sf1033-128-mp3';
+const STREAM_SERVERS = [
+  'https://ice1.somafm.com/sf1033-128-mp3',
+  'https://ice2.somafm.com/sf1033-128-mp3',
+  'https://ice4.somafm.com/sf1033-128-mp3',
+];
 
 export const ScannerPlayerWidget: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(0.85);
   const [streamStatus, setStreamStatus] = useState<'IDLE' | 'BUFFERING' | 'LIVE' | 'ERROR'>('IDLE');
-  const [equalizerBars, setEqualizerBars] = useState<number[]>([10, 10, 10, 10, 10, 10, 10, 10]);
+  const [serverIndex, setServerIndex] = useState<number>(0);
+  const [equalizerBars, setEqualizerBars] = useState<number[]>([8, 8, 8, 8, 8, 8, 8, 8]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize audio element
-  useEffect(() => {
-    const audio = new Audio();
-    audio.crossOrigin = 'anonymous';
-    audio.preload = 'none';
-
-    audio.onplaying = () => {
-      setStreamStatus('LIVE');
-    };
-
-    audio.onwaiting = () => {
-      setStreamStatus('BUFFERING');
-    };
-
-    audio.onerror = () => {
-      setStreamStatus('ERROR');
-      setIsPlaying(false);
-    };
-
-    audioRef.current = audio;
-
-    return () => {
-      audio.pause();
-      audio.src = '';
-    };
-  }, []);
-
-  // Sync volume & mute
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume;
-    }
-  }, [volume, isMuted]);
-
-  // Audio equalizer visualizer animation when playing
+  // Equalizer visualizer animation when active
   useEffect(() => {
     if (!isPlaying || isMuted || streamStatus !== 'LIVE') {
-      setEqualizerBars([10, 10, 10, 10, 10, 10, 10, 10]);
+      setEqualizerBars([8, 8, 8, 8, 8, 8, 8, 8]);
       return;
     }
 
@@ -59,33 +28,60 @@ export const ScannerPlayerWidget: React.FC = () => {
       setEqualizerBars(
         Array.from({ length: 8 }, () => Math.floor(Math.random() * 80) + 20)
       );
-    }, 110);
+    }, 120);
 
     return () => clearInterval(interval);
   }, [isPlaying, isMuted, streamStatus]);
 
+  // Volume & Mute synchronizer
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
+  }, [volume, isMuted]);
+
   const handleTogglePlay = () => {
-    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
 
     if (isPlaying) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
       setIsPlaying(false);
       setStreamStatus('IDLE');
     } else {
       setStreamStatus('BUFFERING');
-      // Add timestamp query parameter to bypass cache and connect to live stream head
-      audioRef.current.src = `${LIVE_SCANNER_STREAM_URL}?t=${Date.now()}`;
-      audioRef.current
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch((err) => {
-          console.warn('Live stream audio play error:', err);
-          setStreamStatus('ERROR');
-          setIsPlaying(false);
-        });
+      const targetUrl = STREAM_SERVERS[serverIndex];
+      audio.src = targetUrl;
+      audio.load();
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            setStreamStatus('LIVE');
+          })
+          .catch((err) => {
+            console.warn('Playback initiation error on server', serverIndex, err);
+            // Try fallback mirror
+            const nextIdx = (serverIndex + 1) % STREAM_SERVERS.length;
+            setServerIndex(nextIdx);
+            audio.src = STREAM_SERVERS[nextIdx];
+            audio.load();
+            audio
+              .play()
+              .then(() => {
+                setIsPlaying(true);
+                setStreamStatus('LIVE');
+              })
+              .catch(() => {
+                setStreamStatus('ERROR');
+                setIsPlaying(false);
+              });
+          });
+      }
     }
   };
 
@@ -103,6 +99,31 @@ export const ScannerPlayerWidget: React.FC = () => {
 
   return (
     <div className="p-3 rounded bg-slate-950/95 border border-cyan-500/30 text-xs font-mono space-y-2.5 shadow-lg">
+      {/* Hidden Native Audio Element without restrictive CORS headers */}
+      <audio
+        ref={audioRef}
+        preload="none"
+        onPlaying={() => {
+          setStreamStatus('LIVE');
+          setIsPlaying(true);
+        }}
+        onWaiting={() => {
+          if (isPlaying) setStreamStatus('BUFFERING');
+        }}
+        onError={() => {
+          // Only show error if audio was actually playing
+          if (isPlaying && audioRef.current?.src) {
+            console.warn('Audio stream error event fired');
+            setStreamStatus('ERROR');
+            setIsPlaying(false);
+          }
+        }}
+        onEnded={() => {
+          setIsPlaying(false);
+          setStreamStatus('IDLE');
+        }}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2">
         <div className="flex items-center gap-2">
@@ -146,10 +167,10 @@ export const ScannerPlayerWidget: React.FC = () => {
             {streamStatus === 'LIVE'
               ? 'CONNECTED // REAL-TIME DISPATCH AUDIO'
               : streamStatus === 'BUFFERING'
-              ? 'CONNECTING TO AUDIO STREAM...'
+              ? 'TUNING RECEIVER FREQUENCY...'
               : streamStatus === 'ERROR'
               ? 'STREAM RECONNECT REQUIRED'
-              : 'RECEIVER STANDBY (PRESS PLAY TO TUNE)'}
+              : 'RECEIVER STANDBY (CLICK LISTEN LIVE TO TUNE)'}
           </span>
         </div>
         <span
@@ -158,6 +179,8 @@ export const ScannerPlayerWidget: React.FC = () => {
               ? 'bg-emerald-950 text-emerald-400 border-emerald-500/50'
               : streamStatus === 'BUFFERING'
               ? 'bg-amber-950 text-amber-400 border-amber-500/50 animate-pulse'
+              : streamStatus === 'ERROR'
+              ? 'bg-rose-950 text-rose-400 border-rose-500/50'
               : 'bg-slate-800 text-slate-400 border-slate-700'
           }`}
         >
