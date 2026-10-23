@@ -7,6 +7,7 @@ import {
   HydroOutage,
   EmergencyDispatch,
   SchoolBusAlert,
+  LiveIncidentEvent,
 } from './types';
 
 // North Perth Reference Coordinates (Town of Listowel Town Hall)
@@ -378,6 +379,96 @@ export async function fetchRoadConditions(apiKey?: string): Promise<RoadConditio
   }
 
   return getRoadConditions();
+}
+
+function getIncidentDistanceFromListowel(lat: number, lon: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat - NORTH_PERTH_COORDS[0]) * Math.PI) / 180;
+  const dLon = ((lon - NORTH_PERTH_COORDS[1]) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((NORTH_PERTH_COORDS[0] * Math.PI) / 180) *
+      Math.cos((lat * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+// 5b. Fetch real-time active MTO/OPP emergency incidents & road closures
+export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncidentEvent[]> {
+  const key = apiKey || DEFAULT_ONTARIO_511_KEY;
+  if (key) {
+    try {
+      const url = `/api/511/api/v2/get/event?key=${encodeURIComponent(key)}&format=json`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          // Filter to Perth County & surrounding regional corridors (radius ~75km from Listowel)
+          const localEvents = data.filter((e: any) => {
+            const lat = Number(e.Latitude);
+            const lon = Number(e.Longitude);
+            if (!lat || !lon) return false;
+            return lat >= 43.15 && lat <= 44.25 && lon >= -81.85 && lon <= -80.25;
+          });
+
+          return localEvents
+            .map((e: any) => {
+              const lat = Number(e.Latitude);
+              const lon = Number(e.Longitude);
+              const typeStr = String(e.EventType || '').toLowerCase();
+              let eventType: LiveIncidentEvent['eventType'] = 'other';
+              if (
+                typeStr.includes('accident') ||
+                typeStr.includes('incident') ||
+                typeStr.includes('collision')
+              ) {
+                eventType = 'accident';
+              } else if (e.IsFullClosure || typeStr.includes('closure')) {
+                eventType = 'closure';
+              } else if (
+                typeStr.includes('roadwork') ||
+                typeStr.includes('construction') ||
+                typeStr.includes('maintenance')
+              ) {
+                eventType = 'roadwork';
+              } else if (
+                typeStr.includes('hazard') ||
+                typeStr.includes('weather') ||
+                typeStr.includes('disabled')
+              ) {
+                eventType = 'hazard';
+              }
+
+              return {
+                id: e.ID,
+                road: e.RoadwayName || 'Corridor',
+                direction: e.DirectionOfTravel || 'Both Directions',
+                description: e.Description || 'Active Incident on Roadway',
+                lanesAffected: e.LanesAffected || 'Lanes Affected',
+                latitude: lat,
+                longitude: lon,
+                eventType,
+                isFullClosure: Boolean(e.IsFullClosure),
+                severity: e.Severity || 'Active',
+                lastUpdated: e.LastUpdated
+                  ? new Date(e.LastUpdated * 1000).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : 'Live',
+                distanceKmToListowel: getIncidentDistanceFromListowel(lat, lon),
+              };
+            })
+            .sort((a, b) => a.distanceKmToListowel - b.distanceKmToListowel);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch 511 incidents:', err);
+    }
+  }
+  return [];
 }
 
 function getFallbackRoadCoords(roadway: string): [number, number][] {

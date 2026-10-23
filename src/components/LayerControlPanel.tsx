@@ -115,11 +115,11 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
     },
     {
       key: 'dispatches',
-      label: 'Emergency / OPP Logs',
-      sublabel: 'Perth County & NP Fire',
+      label: 'Live 511 Incidents & Hazards',
+      sublabel: 'MTO & OPP Highway Closures',
       icon: <ShieldAlert className="w-4 h-4" />,
-      color: 'text-orange-400',
-      badge: '3 CALLS',
+      color: 'text-rose-400',
+      badge: 'LIVE 511',
     },
     {
       key: 'buses',

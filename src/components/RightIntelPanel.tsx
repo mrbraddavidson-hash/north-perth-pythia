@@ -21,8 +21,9 @@ import {
   HydroOutage,
   EmergencyDispatch,
   SchoolBusAlert,
+  LiveIncidentEvent,
 } from '../services/types';
-import { ScannerAudioWidget } from './ScannerAudioWidget';
+import { LiveIncidentsWidget } from './LiveIncidentsWidget';
 
 interface RightIntelPanelProps {
   weather: WeatherTelemetry | null;
@@ -31,8 +32,10 @@ interface RightIntelPanelProps {
   outages: HydroOutage[];
   dispatches: EmergencyDispatch[];
   buses: SchoolBusAlert[];
+  incidents: LiveIncidentEvent[];
   selectedFlight: FlightData | null;
   onSelectFlight: (flight: FlightData | null) => void;
+  onSelectIncident?: (incident: LiveIncidentEvent) => void;
   onOpenAgriModal: () => void;
 }
 
@@ -43,8 +46,10 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   outages,
   dispatches,
   buses,
+  incidents,
   selectedFlight,
   onSelectFlight,
+  onSelectIncident,
   onOpenAgriModal,
 }) => {
   const [activeTab, setActiveTab] = useState<'oracle' | 'airspace' | 'logs'>('oracle');
@@ -87,7 +92,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           }`}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          SCANNER / LOGS
+          INCIDENTS ({incidents.length})
         </button>
       </div>
 
@@ -261,11 +266,14 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 3: INCIDENTS, DISPATCHES & RADIO SCANNER */}
+        {/* TAB 3: LIVE 511 INCIDENTS & MUNICIPAL LOGS */}
         {activeTab === 'logs' && (
           <div className="space-y-3">
-            {/* Live Perth Radio Scanner Player */}
-            <ScannerAudioWidget />
+            {/* Real-time MTO & OPP Live Incidents Widget */}
+            <LiveIncidentsWidget
+              incidents={incidents}
+              onSelectIncident={onSelectIncident}
+            />
 
             {/* Dispatches */}
             <div className="space-y-1.5">

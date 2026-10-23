@@ -78,6 +78,21 @@ export interface HydroOutage {
   estimatedRestoration: string;
 }
 
+export interface LiveIncidentEvent {
+  id: number;
+  road: string;
+  direction: string;
+  description: string;
+  lanesAffected: string;
+  latitude: number;
+  longitude: number;
+  eventType: 'accident' | 'closure' | 'roadwork' | 'hazard' | 'other';
+  isFullClosure: boolean;
+  severity: string;
+  lastUpdated: string;
+  distanceKmToListowel: number;
+}
+
 export interface EmergencyDispatch {
   id: string;
   agency: 'OPP' | 'NP_FIRE' | 'PARAMEDIC';

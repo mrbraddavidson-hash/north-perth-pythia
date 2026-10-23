@@ -16,6 +16,7 @@ import {
   HydroOutage,
   EmergencyDispatch,
   SchoolBusAlert,
+  LiveIncidentEvent,
 } from './services/types';
 import {
   fetchLiveFlights,
@@ -23,6 +24,7 @@ import {
   fetchWeatherTelemetry,
   fetchTrafficCameras,
   fetchRoadConditions,
+  fetchLive511Incidents,
   DEFAULT_ONTARIO_511_KEY,
   getHydroOutages,
   getEmergencyDispatches,
@@ -79,22 +81,32 @@ export function App() {
   const [aurora, setAurora] = useState<AuroraData | null>(null);
   const [iss, setIss] = useState<IssTelemetry | null>(null);
   const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
+  const [incidents, setIncidents] = useState<LiveIncidentEvent[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Load all live feeds
   const refreshAllFeeds = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [flightsData, riverData, weatherData, camsData, roadsData, auroraData, issData] =
-        await Promise.all([
-          fetchLiveFlights(),
-          fetchRiverGauges(),
-          fetchWeatherTelemetry(),
-          fetchTrafficCameras(apiKey),
-          fetchRoadConditions(apiKey),
-          fetchAuroraKp(),
-          fetchLiveIss(),
-        ]);
+      const [
+        flightsData,
+        riverData,
+        weatherData,
+        camsData,
+        roadsData,
+        auroraData,
+        issData,
+        incidentsData,
+      ] = await Promise.all([
+        fetchLiveFlights(),
+        fetchRiverGauges(),
+        fetchWeatherTelemetry(),
+        fetchTrafficCameras(apiKey),
+        fetchRoadConditions(apiKey),
+        fetchAuroraKp(),
+        fetchLiveIss(),
+        fetchLive511Incidents(apiKey),
+      ]);
 
       setFlights(flightsData);
       setRiverGauges(riverData);
@@ -103,6 +115,7 @@ export function App() {
       setRoads(roadsData);
       setAurora(auroraData);
       setIss(issData);
+      setIncidents(incidentsData);
 
       // Compute squall trajectory based on live wind and temperature
       if (weatherData) {
@@ -231,6 +244,7 @@ export function App() {
             radarOpacity={radarOpacity}
             squallTrajectory={squallTrajectory}
             iss={iss}
+            incidents={incidents}
           />
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
@@ -279,6 +293,7 @@ export function App() {
             outages={outages}
             dispatches={dispatches}
             buses={buses}
+            incidents={incidents}
             selectedFlight={selectedFlight}
             onSelectFlight={handleSelectFlight}
             onOpenAgriModal={() => setIsAgriModalOpen(true)}
@@ -326,7 +341,7 @@ export function App() {
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-amber-400" />
                   <span className="font-tactical text-sm font-bold text-white tracking-wider">
-                    SITREP, SCANNER & AIRSPACE
+                    SITREP, INCIDENTS & AIRSPACE
                   </span>
                 </div>
                 <button
@@ -344,6 +359,7 @@ export function App() {
                   outages={outages}
                   dispatches={dispatches}
                   buses={buses}
+                  incidents={incidents}
                   selectedFlight={selectedFlight}
                   onSelectFlight={handleSelectFlight}
                   onOpenAgriModal={() => {

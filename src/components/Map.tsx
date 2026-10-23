@@ -7,6 +7,7 @@ import {
   RoadCondition,
   HydroOutage,
   ActiveLayers,
+  LiveIncidentEvent,
 } from '../services/types';
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS, TownMarker } from '../services/api';
 import { LISTOWEL_HELIPAD_COORDS, SquallTrajectory } from '../services/squall';
@@ -25,6 +26,7 @@ interface MapProps {
   radarOpacity: number;
   squallTrajectory?: SquallTrajectory | null;
   iss?: IssTelemetry | null;
+  incidents?: LiveIncidentEvent[];
 }
 
 type MapStyle = 'tactical' | 'streets' | 'satellite' | 'topo';
@@ -41,6 +43,7 @@ export const MapView: React.FC<MapProps> = ({
   radarOpacity,
   squallTrajectory,
   iss,
+  incidents = [],
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -66,6 +69,7 @@ export const MapView: React.FC<MapProps> = ({
   const helipadGroupRef = useRef<L.LayerGroup | null>(null);
   const squallGroupRef = useRef<L.LayerGroup | null>(null);
   const issGroupRef = useRef<L.LayerGroup | null>(null);
+  const incidentsGroupRef = useRef<L.LayerGroup | null>(null);
 
   // Initialize Map
   useEffect(() => {
@@ -146,6 +150,7 @@ export const MapView: React.FC<MapProps> = ({
     helipadGroupRef.current = L.layerGroup().addTo(map);
     squallGroupRef.current = L.layerGroup().addTo(map);
     issGroupRef.current = L.layerGroup().addTo(map);
+    incidentsGroupRef.current = L.layerGroup().addTo(map);
 
     // Environment Canada GeoMet WMS Doppler Precipitation Radar
     const radarWms = L.tileLayer.wms('https://geo.weather.gc.ca/geomet', {
@@ -683,6 +688,68 @@ export const MapView: React.FC<MapProps> = ({
       </div>
     `);
   }, [layers.satellites, iss]);
+
+  // Render Real-Time 511 Incident & Closure Markers
+  useEffect(() => {
+    if (!incidentsGroupRef.current || !mapInstanceRef.current) return;
+    incidentsGroupRef.current.clearLayers();
+
+    if (!layers.dispatches && !layers.roads) return;
+
+    incidents.forEach((inc) => {
+      const isClosure = inc.isFullClosure || inc.eventType === 'closure';
+      const isAccident = inc.eventType === 'accident' || inc.eventType === 'hazard';
+
+      const iconHtml = `
+        <div class="relative flex items-center justify-center cursor-pointer">
+          <div class="w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-950 shadow-lg ${
+            isClosure
+              ? 'bg-rose-600 animate-pulse'
+              : isAccident
+              ? 'bg-amber-500'
+              : 'bg-cyan-600'
+          }">
+            <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+        </div>
+      `;
+
+      const customIcon = L.divIcon({
+        className: 'custom-incident-marker',
+        html: iconHtml,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([inc.latitude, inc.longitude], { icon: customIcon });
+
+      marker.bindPopup(`
+        <div class="p-2 space-y-1.5 text-xs font-mono max-w-[280px]">
+          <div class="font-bold ${isClosure ? 'text-rose-400' : 'text-amber-400'} text-sm border-b border-slate-700 pb-1 flex items-center justify-between">
+            <span>${inc.road} (${inc.direction})</span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+              isClosure
+                ? 'bg-rose-950 text-rose-300 border border-rose-500'
+                : 'bg-amber-950 text-amber-300 border border-amber-500'
+            }">
+              ${isClosure ? 'FULL CLOSURE' : inc.eventType.toUpperCase()}
+            </span>
+          </div>
+          <div class="text-[11px] text-slate-200 font-sans leading-relaxed">
+            ${inc.description}
+          </div>
+          <div class="text-[10px] text-slate-400 border-t border-slate-800 pt-1 flex justify-between">
+            <span>${inc.lanesAffected}</span>
+            <span class="text-cyan-400 font-semibold">${inc.distanceKmToListowel} km out</span>
+          </div>
+        </div>
+      `);
+
+      marker.addTo(incidentsGroupRef.current!);
+    });
+  }, [incidents, layers.dispatches, layers.roads]);
 
   return (
     <div className="relative w-full h-full">
