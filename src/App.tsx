@@ -29,6 +29,10 @@ import {
   getHydroOutages,
   getEmergencyDispatches,
   getSchoolBusAlerts,
+  getFallbackFlights,
+  getFallbackRiverGauges,
+  getFallbackTrafficCameras,
+  getRoadConditions,
   NORTH_PERTH_COORDS,
 } from './services/api';
 import { fetchAuroraKp, fetchLiveIss, AuroraData, IssTelemetry } from './services/space';
@@ -49,10 +53,12 @@ export function App() {
   // Mobile drawer states: 'none' | 'layers' | 'intel'
   const [mobileDrawer, setMobileDrawer] = useState<'none' | 'layers' | 'intel'>('none');
 
-  // Layer visibility state
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+  // Layer visibility state (default radar off on mobile to prevent 20 heavy WMS tiles blocking mobile data)
   const [layers, setLayers] = useState<ActiveLayers>({
     towns: true,
-    radar: true,
+    radar: !isMobile,
     squall: true,
     flights: true,
     helipad: true,
@@ -69,15 +75,15 @@ export function App() {
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
   const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
 
-  // Live Data states
-  const [flights, setFlights] = useState<FlightData[]>([]);
-  const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>([]);
+  // Live Data states with instant 0ms baseline hydration
+  const [flights, setFlights] = useState<FlightData[]>(getFallbackFlights);
+  const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>(getFallbackRiverGauges);
   const [weather, setWeather] = useState<WeatherTelemetry | null>(null);
-  const [cameras, setCameras] = useState<TrafficCamera[]>([]);
-  const [roads, setRoads] = useState<RoadCondition[]>([]);
-  const [outages, setOutages] = useState<HydroOutage[]>([]);
-  const [dispatches, setDispatches] = useState<EmergencyDispatch[]>([]);
-  const [buses, setBuses] = useState<SchoolBusAlert[]>([]);
+  const [cameras, setCameras] = useState<TrafficCamera[]>(getFallbackTrafficCameras);
+  const [roads, setRoads] = useState<RoadCondition[]>(getRoadConditions);
+  const [outages, setOutages] = useState<HydroOutage[]>(getHydroOutages);
+  const [dispatches, setDispatches] = useState<EmergencyDispatch[]>(getEmergencyDispatches);
+  const [buses, setBuses] = useState<SchoolBusAlert[]>(getSchoolBusAlerts);
   const [aurora, setAurora] = useState<AuroraData | null>(null);
   const [iss, setIss] = useState<IssTelemetry | null>(null);
   const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
@@ -141,9 +147,48 @@ export function App() {
   };
 
   useEffect(() => {
+    // Initial fetch in background
     refreshAllFeeds();
-    const interval = setInterval(refreshAllFeeds, 20000);
-    return () => clearInterval(interval);
+
+    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 768;
+    // 45s on mobile / cellular to conserve data & battery, 20s on desktop
+    const pollIntervalMs = isMobileDevice ? 45000 : 20000;
+
+    let intervalId: any = null;
+
+    const startPolling = () => {
+      if (!intervalId) {
+        intervalId = setInterval(() => {
+          if (!document.hidden) {
+            refreshAllFeeds();
+          }
+        }, pollIntervalMs);
+      }
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        refreshAllFeeds();
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [refreshAllFeeds]);
 
   const handleToggleLayer = (key: keyof ActiveLayers) => {

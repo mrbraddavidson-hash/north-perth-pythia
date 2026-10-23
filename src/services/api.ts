@@ -97,8 +97,33 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
   return Math.round(R * c * 10) / 10;
 }
 
+// In-Memory Mobile/Cellular SWR Cache Store
+interface CacheEntry<T> {
+  data: T;
+  expiry: number;
+}
+const cacheStore: Record<string, CacheEntry<any>> = {};
+
+function getCached<T>(key: string): T | null {
+  const item = cacheStore[key];
+  if (item && item.expiry > Date.now()) {
+    return item.data;
+  }
+  return null;
+}
+
+function setCached<T>(key: string, data: T, ttlMs: number): void {
+  cacheStore[key] = {
+    data,
+    expiry: Date.now() + ttlMs,
+  };
+}
+
 // 1. Fetch live flights from OpenSky Network
 export async function fetchLiveFlights(): Promise<FlightData[]> {
+  const cached = getCached<FlightData[]>('opensky-flights');
+  if (cached) return cached;
+
   try {
     // Try via Vite proxy first, fallback to direct OpenSky
     const proxyUrl = '/api/opensky/states/all?lamin=43.3&lomin=-81.6&lamax=44.2&lomax=-80.4';
@@ -117,7 +142,7 @@ export async function fetchLiveFlights(): Promise<FlightData[]> {
     const data = await res.json();
     if (!data.states || !Array.isArray(data.states)) return getFallbackFlights();
 
-    return data.states.map((state: any[]) => {
+    const mapped = data.states.map((state: any[]) => {
       const icao24 = state[0];
       const callsign = (state[1] || 'UNKN').trim();
       const originCountry = state[2] || 'Unknown';
@@ -148,6 +173,9 @@ export async function fetchLiveFlights(): Promise<FlightData[]> {
         distanceKmToListowel: dist,
       };
     });
+
+    setCached('opensky-flights', mapped, 20 * 1000);
+    return mapped;
   } catch (err) {
     console.warn('OpenSky API unavailable, using simulated real-time telemetry:', err);
     return getFallbackFlights();
@@ -156,6 +184,9 @@ export async function fetchLiveFlights(): Promise<FlightData[]> {
 
 // 2. Fetch live hydrometric river gauge from Environment Canada / WaterOffice
 export async function fetchRiverGauges(): Promise<RiverGaugeData[]> {
+  const cached = getCached<RiverGaugeData[]>('wateroffice-gauges');
+  if (cached) return cached;
+
   try {
     const proxyUrl = '/api/wateroffice/csv/ON/hourly/ON_02FE003_hourly_hydrometric.csv';
     const directUrl = 'https://dd.weather.gc.ca/today/hydrometric/csv/ON/hourly/ON_02FE003_hourly_hydrometric.csv';
@@ -187,7 +218,7 @@ export async function fetchRiverGauges(): Promise<RiverGaugeData[]> {
         else if (waterLevel > 7.8) alert = 'WARNING';
         else if (waterLevel > 7.2) alert = 'ELEVATED';
 
-        return [
+        const result: RiverGaugeData[] = [
           {
             stationId: '02FE003',
             stationName: 'Middle Maitland River near Listowel',
@@ -216,6 +247,8 @@ export async function fetchRiverGauges(): Promise<RiverGaugeData[]> {
             trend: 'FALLING',
           },
         ];
+        setCached('wateroffice-gauges', result, 5 * 60 * 1000);
+        return result;
       }
     }
     return getFallbackRiverGauges();
@@ -227,6 +260,9 @@ export async function fetchRiverGauges(): Promise<RiverGaugeData[]> {
 
 // 3. Fetch hyper-local North Perth weather telemetry
 export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
+  const cached = getCached<WeatherTelemetry>('weather-telemetry');
+  if (cached) return cached;
+
   try {
     const url =
       'https://api.open-meteo.com/v1/forecast?latitude=43.73&longitude=-80.95&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover&timezone=America%2FToronto';
@@ -235,7 +271,7 @@ export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
     const data = await res.json();
     const curr = data.current;
 
-    return {
+    const result: WeatherTelemetry = {
       temperatureC: Math.round(curr.temperature_2m * 10) / 10,
       apparentTempC: Math.round(curr.apparent_temperature * 10) / 10,
       humidityPercent: Math.round(curr.relative_humidity_2m),
@@ -247,6 +283,8 @@ export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
       barometricPressureHpa: Math.round(curr.surface_pressure),
       cloudCoverPercent: curr.cloud_cover ?? 45,
     };
+    setCached('weather-telemetry', result, 2 * 60 * 1000);
+    return result;
   } catch (err) {
     console.warn('Weather fallback:', err);
     return {
@@ -282,6 +320,9 @@ export const DEFAULT_ONTARIO_511_KEY = '76bf408985044069bb0ad2560d2d1a2a';
 
 // 4. Traffic Cameras along Southwestern Ontario & Perth County Corridors
 export async function fetchTrafficCameras(apiKey?: string): Promise<TrafficCamera[]> {
+  const cached = getCached<TrafficCamera[]>('511-cameras');
+  if (cached) return cached;
+
   const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('ONTARIO_511_KEY') : null) || DEFAULT_ONTARIO_511_KEY;
 
   if (key) {
@@ -321,6 +362,7 @@ export async function fetchTrafficCameras(apiKey?: string): Promise<TrafficCamer
             .slice(0, 25);
 
           if (mapped.length > 0) {
+            setCached('511-cameras', mapped, 10 * 60 * 1000);
             return mapped;
           }
         }
@@ -334,6 +376,9 @@ export async function fetchTrafficCameras(apiKey?: string): Promise<TrafficCamer
 }
 
 export async function fetchRoadConditions(apiKey?: string): Promise<RoadCondition[]> {
+  const cached = getCached<RoadCondition[]>('511-roads');
+  if (cached) return cached;
+
   const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('ONTARIO_511_KEY') : null) || DEFAULT_ONTARIO_511_KEY;
 
   if (key) {
@@ -350,7 +395,7 @@ export async function fetchRoadConditions(apiKey?: string): Promise<RoadConditio
           });
 
           if (relevant.length > 0) {
-            return relevant.map((r: any, idx: number) => {
+            const mapped = relevant.map((r: any, idx: number) => {
               const cond = Array.isArray(r.Condition) ? r.Condition.join(', ') : (r.Condition || 'Bare & Dry');
               let status: RoadCondition['status'] = 'BARE_DRY';
               const condLower = cond.toLowerCase();
@@ -370,6 +415,8 @@ export async function fetchRoadConditions(apiKey?: string): Promise<RoadConditio
                 coords: getFallbackRoadCoords(String(r.RoadwayName || '')),
               };
             });
+            setCached('511-roads', mapped, 4 * 60 * 1000);
+            return mapped;
           }
         }
       }
@@ -397,6 +444,9 @@ function getIncidentDistanceFromListowel(lat: number, lon: number): number {
 
 // 5b. Fetch real-time active MTO/OPP emergency incidents & road closures
 export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncidentEvent[]> {
+  const cached = getCached<LiveIncidentEvent[]>('511-incidents');
+  if (cached) return cached;
+
   const key = apiKey || DEFAULT_ONTARIO_511_KEY;
   if (key) {
     try {
@@ -423,7 +473,7 @@ export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncide
             return inBox || isPerthCorridor;
           });
 
-          return localEvents
+          const results = localEvents
             .map((e: any) => {
               const lat = Number(e.Latitude);
               const lon = Number(e.Longitude);
@@ -472,6 +522,9 @@ export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncide
               };
             })
             .sort((a, b) => a.distanceKmToListowel - b.distanceKmToListowel);
+
+          setCached('511-incidents', results, 60 * 1000);
+          return results;
         }
       }
     } catch (err) {
@@ -658,7 +711,7 @@ export function getSchoolBusAlerts(): SchoolBusAlert[] {
 }
 
 // Fallback simulated aircraft when network/CORS blocks direct OpenSky calls
-function getFallbackFlights(): FlightData[] {
+export function getFallbackFlights(): FlightData[] {
   return [
     {
       icao24: 'c01fa2',
@@ -723,7 +776,7 @@ function getFallbackFlights(): FlightData[] {
   ];
 }
 
-function getFallbackRiverGauges(): RiverGaugeData[] {
+export function getFallbackRiverGauges(): RiverGaugeData[] {
   return [
     {
       stationId: '02FE003',
