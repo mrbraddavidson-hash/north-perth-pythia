@@ -24,6 +24,7 @@ import {
   LiveIncidentEvent,
 } from '../services/types';
 import { LiveIncidentsWidget } from './LiveIncidentsWidget';
+import { ScannerPlayerWidget } from './ScannerPlayerWidget';
 
 interface RightIntelPanelProps {
   weather: WeatherTelemetry | null;
@@ -92,7 +93,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           }`}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          INCIDENTS ({incidents.length})
+          SCANNER & INCIDENTS ({incidents.length})
         </button>
       </div>
 
@@ -266,9 +267,12 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 3: LIVE 511 INCIDENTS & MUNICIPAL LOGS */}
+        {/* TAB 3: LIVE SCANNER, 511 INCIDENTS & MUNICIPAL LOGS */}
         {activeTab === 'logs' && (
           <div className="space-y-3">
+            {/* Native In-Page Live Tactical Scanner Audio Player */}
+            <ScannerPlayerWidget />
+
             {/* Real-time MTO & OPP Live Incidents Widget */}
             <LiveIncidentsWidget
               incidents={incidents}
