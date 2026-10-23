@@ -1,21 +1,27 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Radio, Volume2, VolumeX, Play, Square, Signal } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Radio, Volume2, VolumeX, Play, Square, Signal, RotateCw } from 'lucide-react';
 
 const STREAM_SERVERS = [
   'https://ice1.somafm.com/sf1033-128-mp3',
   'https://ice2.somafm.com/sf1033-128-mp3',
   'https://ice4.somafm.com/sf1033-128-mp3',
+  'https://ice6.somafm.com/sf1033-128-mp3',
 ];
+
+const MAX_AUTO_RETRIES = 3;
 
 export const ScannerPlayerWidget: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(0.85);
-  const [streamStatus, setStreamStatus] = useState<'IDLE' | 'BUFFERING' | 'LIVE' | 'ERROR'>('IDLE');
+  const [streamStatus, setStreamStatus] = useState<'IDLE' | 'BUFFERING' | 'LIVE' | 'RECONNECTING' | 'ERROR'>('IDLE');
   const [serverIndex, setServerIndex] = useState<number>(0);
+  const [retryAttempt, setRetryAttempt] = useState<number>(0);
   const [equalizerBars, setEqualizerBars] = useState<number[]>([8, 8, 8, 8, 8, 8, 8, 8]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isStoppingRef = useRef<boolean>(false);
+  const retryTimeoutRef = useRef<any>(null);
 
   // Equalizer visualizer animation when active
   useEffect(() => {
@@ -40,48 +46,100 @@ export const ScannerPlayerWidget: React.FC = () => {
     }
   }, [volume, isMuted]);
 
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    };
+  }, []);
+
+  const startStream = useCallback((serverIdx: number, retryCount = 0) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
+    isStoppingRef.current = false;
+    setStreamStatus(retryCount > 0 ? 'RECONNECTING' : 'BUFFERING');
+    setRetryAttempt(retryCount);
+
+    const baseUrl = STREAM_SERVERS[serverIdx % STREAM_SERVERS.length];
+    // Cache-buster parameter forces a clean, fresh socket on reconnect
+    const targetUrl = `${baseUrl}?_t=${Date.now()}`;
+
+    audio.src = targetUrl;
+    const playPromise = audio.play();
+
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          if (!isStoppingRef.current) {
+            setIsPlaying(true);
+            setStreamStatus('LIVE');
+            setRetryAttempt(0);
+          }
+        })
+        .catch((err) => {
+          // Ignore synthetic abort errors caused by intentional user stop
+          if (err.name === 'AbortError' && isStoppingRef.current) {
+            return;
+          }
+          console.warn('Audio stream play initiation error:', err);
+          handleStreamFailure(serverIdx, retryCount);
+        });
+    }
+  }, []);
+
+  const handleStreamFailure = useCallback((currentIdx: number, currentRetries: number) => {
+    if (isStoppingRef.current) return;
+
+    if (currentRetries < MAX_AUTO_RETRIES) {
+      const nextServer = (currentIdx + 1) % STREAM_SERVERS.length;
+      setServerIndex(nextServer);
+      setStreamStatus('RECONNECTING');
+      setRetryAttempt(currentRetries + 1);
+
+      // Backoff before retrying next mirror
+      retryTimeoutRef.current = setTimeout(() => {
+        if (!isStoppingRef.current) {
+          startStream(nextServer, currentRetries + 1);
+        }
+      }, 1500);
+    } else {
+      setStreamStatus('ERROR');
+      setIsPlaying(false);
+    }
+  }, [startStream]);
+
   const handleTogglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (isPlaying) {
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
+    if (isPlaying || streamStatus === 'BUFFERING' || streamStatus === 'RECONNECTING') {
+      // User requested stop
+      isStoppingRef.current = true;
       audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
+      audio.src = '';
       setIsPlaying(false);
       setStreamStatus('IDLE');
+      setRetryAttempt(0);
     } else {
-      setStreamStatus('BUFFERING');
-      const targetUrl = STREAM_SERVERS[serverIndex];
-      audio.src = targetUrl;
-      audio.load();
-
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            setIsPlaying(true);
-            setStreamStatus('LIVE');
-          })
-          .catch((err) => {
-            console.warn('Playback initiation error on server', serverIndex, err);
-            // Try fallback mirror
-            const nextIdx = (serverIndex + 1) % STREAM_SERVERS.length;
-            setServerIndex(nextIdx);
-            audio.src = STREAM_SERVERS[nextIdx];
-            audio.load();
-            audio
-              .play()
-              .then(() => {
-                setIsPlaying(true);
-                setStreamStatus('LIVE');
-              })
-              .catch(() => {
-                setStreamStatus('ERROR');
-                setIsPlaying(false);
-              });
-          });
-      }
+      // User requested start/reconnect
+      isStoppingRef.current = false;
+      setIsPlaying(true);
+      startStream(serverIndex, 0);
     }
   };
 
@@ -99,28 +157,32 @@ export const ScannerPlayerWidget: React.FC = () => {
 
   return (
     <div className="p-3 rounded bg-slate-950/95 border border-cyan-500/30 text-xs font-mono space-y-2.5 shadow-lg">
-      {/* Hidden Native Audio Element without restrictive CORS headers */}
+      {/* Hidden Native Audio Element */}
       <audio
         ref={audioRef}
         preload="none"
         onPlaying={() => {
-          setStreamStatus('LIVE');
-          setIsPlaying(true);
+          if (!isStoppingRef.current) {
+            setStreamStatus('LIVE');
+            setIsPlaying(true);
+            setRetryAttempt(0);
+          }
         }}
         onWaiting={() => {
-          if (isPlaying) setStreamStatus('BUFFERING');
+          if (isPlaying && !isStoppingRef.current && streamStatus !== 'RECONNECTING') {
+            setStreamStatus('BUFFERING');
+          }
         }}
         onError={() => {
-          // Only show error if audio was actually playing
-          if (isPlaying && audioRef.current?.src) {
-            console.warn('Audio stream error event fired');
-            setStreamStatus('ERROR');
-            setIsPlaying(false);
+          if (!isStoppingRef.current && (isPlaying || streamStatus === 'BUFFERING' || streamStatus === 'RECONNECTING')) {
+            console.warn('Audio stream socket error event fired');
+            handleStreamFailure(serverIndex, retryAttempt);
           }
         }}
         onEnded={() => {
-          setIsPlaying(false);
-          setStreamStatus('IDLE');
+          if (!isStoppingRef.current) {
+            handleStreamFailure(serverIndex, retryAttempt);
+          }
         }}
       />
 
@@ -168,8 +230,10 @@ export const ScannerPlayerWidget: React.FC = () => {
               ? 'CONNECTED // REAL-TIME DISPATCH AUDIO'
               : streamStatus === 'BUFFERING'
               ? 'TUNING RECEIVER FREQUENCY...'
+              : streamStatus === 'RECONNECTING'
+              ? `RECONNECTING STREAM (ATTEMPT ${retryAttempt}/${MAX_AUTO_RETRIES})...`
               : streamStatus === 'ERROR'
-              ? 'STREAM RECONNECT REQUIRED'
+              ? 'STREAM RECONNECT REQUIRED // CONNECTION DROPPED'
               : 'RECEIVER STANDBY (CLICK LISTEN LIVE TO TUNE)'}
           </span>
         </div>
@@ -179,6 +243,8 @@ export const ScannerPlayerWidget: React.FC = () => {
               ? 'bg-emerald-950 text-emerald-400 border-emerald-500/50'
               : streamStatus === 'BUFFERING'
               ? 'bg-amber-950 text-amber-400 border-amber-500/50 animate-pulse'
+              : streamStatus === 'RECONNECTING'
+              ? 'bg-amber-950 text-amber-300 border-amber-500/50 animate-pulse'
               : streamStatus === 'ERROR'
               ? 'bg-rose-950 text-rose-400 border-rose-500/50'
               : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -194,15 +260,22 @@ export const ScannerPlayerWidget: React.FC = () => {
           <button
             onClick={handleTogglePlay}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-tactical font-bold text-xs tracking-wider transition-all cursor-pointer shadow-md ${
-              isPlaying
+              isPlaying || streamStatus === 'BUFFERING' || streamStatus === 'RECONNECTING'
                 ? 'bg-rose-950/90 text-rose-300 border border-rose-500/50 hover:bg-rose-900'
+                : streamStatus === 'ERROR'
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-[0_0_12px_#f59e0b]'
                 : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_0_12px_#00f2fe]'
             }`}
           >
-            {isPlaying ? (
+            {isPlaying || streamStatus === 'BUFFERING' || streamStatus === 'RECONNECTING' ? (
               <>
                 <Square className="w-3.5 h-3.5 fill-current" />
                 <span>MUTE SCANNER</span>
+              </>
+            ) : streamStatus === 'ERROR' ? (
+              <>
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>RECONNECT SCANNER</span>
               </>
             ) : (
               <>
