@@ -9,7 +9,9 @@ import {
   ActiveLayers,
 } from '../services/types';
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS, TownMarker } from '../services/api';
-import { MapPin, Navigation2, Mountain, Layers, Eye } from 'lucide-react';
+import { LISTOWEL_HELIPAD_COORDS, SquallTrajectory } from '../services/squall';
+import { IssTelemetry } from '../services/space';
+import { MapPin, Navigation2, Mountain, Layers, Eye, Plus, Orbit, Wind, Crosshair } from 'lucide-react';
 
 interface MapProps {
   layers: ActiveLayers;
@@ -21,6 +23,8 @@ interface MapProps {
   selectedFlight: FlightData | null;
   onSelectFlight: (flight: FlightData | null) => void;
   radarOpacity: number;
+  squallTrajectory?: SquallTrajectory | null;
+  iss?: IssTelemetry | null;
 }
 
 type MapStyle = 'tactical' | 'streets' | 'satellite' | 'topo';
@@ -35,6 +39,8 @@ export const MapView: React.FC<MapProps> = ({
   selectedFlight,
   onSelectFlight,
   radarOpacity,
+  squallTrajectory,
+  iss,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -57,6 +63,9 @@ export const MapView: React.FC<MapProps> = ({
   const camsGroupRef = useRef<L.LayerGroup | null>(null);
   const roadsGroupRef = useRef<L.LayerGroup | null>(null);
   const outagesGroupRef = useRef<L.LayerGroup | null>(null);
+  const helipadGroupRef = useRef<L.LayerGroup | null>(null);
+  const squallGroupRef = useRef<L.LayerGroup | null>(null);
+  const issGroupRef = useRef<L.LayerGroup | null>(null);
 
   // Initialize Map
   useEffect(() => {
@@ -134,6 +143,9 @@ export const MapView: React.FC<MapProps> = ({
     camsGroupRef.current = L.layerGroup().addTo(map);
     roadsGroupRef.current = L.layerGroup().addTo(map);
     outagesGroupRef.current = L.layerGroup().addTo(map);
+    helipadGroupRef.current = L.layerGroup().addTo(map);
+    squallGroupRef.current = L.layerGroup().addTo(map);
+    issGroupRef.current = L.layerGroup().addTo(map);
 
     // Environment Canada GeoMet WMS Doppler Precipitation Radar
     const radarWms = L.tileLayer.wms('https://geo.weather.gc.ca/geomet', {
@@ -536,6 +548,141 @@ export const MapView: React.FC<MapProps> = ({
       `);
     });
   }, [outages, layers.hydro]);
+
+  // Render Listowel Memorial Hospital Helipad (CPN5)
+  useEffect(() => {
+    if (!helipadGroupRef.current || !mapInstanceRef.current) return;
+    helipadGroupRef.current.clearLayers();
+
+    if (!layers.helipad) return;
+
+    const icon = L.divIcon({
+      className: 'helipad-marker-icon',
+      html: `
+        <div class="relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-950/95 border-2 border-rose-500 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.5)] cursor-pointer">
+          <span class="font-tactical font-black text-xs">H</span>
+          <span class="absolute -bottom-4 whitespace-nowrap text-[8px] bg-slate-950/90 text-rose-300 px-1 rounded border border-rose-500/40 font-mono">LMH HELIPORT</span>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    const marker = L.marker(LISTOWEL_HELIPAD_COORDS, { icon, zIndexOffset: 75 }).addTo(helipadGroupRef.current);
+
+    // 1.2km approach radius circle
+    L.circle(LISTOWEL_HELIPAD_COORDS, {
+      radius: 1200,
+      color: '#ef4444',
+      weight: 1.5,
+      opacity: 0.6,
+      fillColor: '#ef4444',
+      fillOpacity: 0.05,
+      dashArray: '4, 6',
+    }).addTo(helipadGroupRef.current);
+
+    marker.bindPopup(`
+      <div class="p-2 space-y-1 text-xs font-mono">
+        <div class="font-bold text-rose-400 text-sm border-b border-rose-500/30 pb-1 flex items-center justify-between">
+          <span>LISTOWEL MEMORIAL HOSPITAL</span>
+          <span class="text-[9px] bg-rose-950 px-1 rounded border border-rose-500">CPN5</span>
+        </div>
+        <div class="text-[11px] text-slate-300">ICAO / Identifier: <span class="text-white font-bold">CPN5 (Heliport)</span></div>
+        <div class="text-[11px] text-slate-300">Primary Operator: <span class="text-rose-300 font-semibold">Ornge Air Ambulance (Rotary 793)</span></div>
+        <div class="text-[11px] text-slate-300">Coordinates: <span class="text-white">43.7372°N, 80.9568°W</span></div>
+        <div class="text-[10px] text-slate-400 pt-1">Critical Care Trauma Rendezvous & Landing Zone</div>
+      </div>
+    `);
+  }, [layers.helipad]);
+
+  // Render Lake Huron Snow Squall Streamer Trajectory
+  useEffect(() => {
+    if (!squallGroupRef.current || !mapInstanceRef.current) return;
+    squallGroupRef.current.clearLayers();
+
+    if (!layers.squall) return;
+
+    // Use calculated squall polygon or default Lake Huron -> Perth County streamer corridor
+    const polygonCoords =
+      squallTrajectory && squallTrajectory.streamerPolygon.length > 0
+        ? squallTrajectory.streamerPolygon
+        : [
+            [43.82, -81.72],
+            [43.66, -81.7],
+            [43.6, -80.85],
+            [43.85, -80.87],
+          ];
+
+    const polygon = L.polygon(polygonCoords as L.LatLngExpression[], {
+      color: '#38bdf8',
+      weight: 2,
+      opacity: 0.8,
+      fillColor: '#0284c7',
+      fillOpacity: 0.18,
+      dashArray: '6, 8',
+    }).addTo(squallGroupRef.current);
+
+    polygon.bindPopup(`
+      <div class="p-2 space-y-1.5 text-xs font-mono max-w-[280px]">
+        <div class="font-bold text-sky-400 text-sm border-b border-sky-500/30 pb-1 flex items-center gap-1.5">
+          <span>LAKE HURON SQUALL TRAJECTORY</span>
+        </div>
+        <div class="text-[11px] text-slate-300">Fetch Origin: <span class="text-white font-bold">Goderich / Shoreline</span></div>
+        <div class="text-[11px] text-slate-300">Vector Path: <span class="text-sky-300 font-semibold">Hwy 86 & Hwy 23 Corridor</span></div>
+        <div class="text-[10px] text-slate-400 leading-normal">
+          ${squallTrajectory?.summary || 'Lake effect squall streamer corridor projected downwind across North Perth.'}
+        </div>
+      </div>
+    `);
+  }, [layers.squall, squallTrajectory]);
+
+  // Render ISS Satellite Live Marker
+  useEffect(() => {
+    if (!issGroupRef.current || !mapInstanceRef.current) return;
+    issGroupRef.current.clearLayers();
+
+    if (!layers.satellites || !iss) return;
+
+    const icon = L.divIcon({
+      className: 'iss-marker-icon',
+      html: `
+        <div class="relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-950/95 border-2 border-purple-400 text-purple-300 shadow-[0_0_15px_#c084fc] cursor-pointer">
+          <svg class="w-4 h-4 animate-spin" style="animation-duration: 30s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M3 12h3M18 12h3M12 3v3M12 18v3"/>
+          </svg>
+          <span class="absolute -bottom-4 whitespace-nowrap text-[8px] bg-slate-950/90 text-purple-300 px-1 rounded border border-purple-500/40 font-mono">ISS (${iss.altitudeKm}km)</span>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    const marker = L.marker([iss.latitude, iss.longitude], { icon, zIndexOffset: 95 }).addTo(
+      issGroupRef.current
+    );
+
+    // 800km visibility footprint radius
+    L.circle([iss.latitude, iss.longitude], {
+      radius: 800000,
+      color: '#c084fc',
+      weight: 1,
+      opacity: 0.4,
+      fillColor: '#c084fc',
+      fillOpacity: 0.04,
+    }).addTo(issGroupRef.current);
+
+    marker.bindPopup(`
+      <div class="p-2 space-y-1 text-xs font-mono">
+        <div class="font-bold text-purple-400 text-sm border-b border-purple-500/30 pb-1">
+          INTERNATIONAL SPACE STATION (ISS)
+        </div>
+        <div class="text-[11px] text-slate-300">Altitude: <span class="text-white font-bold">${iss.altitudeKm} km</span></div>
+        <div class="text-[11px] text-slate-300">Velocity: <span class="text-white font-bold">${iss.velocityKmh.toLocaleString()} km/h</span></div>
+        <div class="text-[11px] text-slate-300">Dist to Listowel: <span class="text-cyan-300 font-bold">${iss.distanceKmToListowel} km</span></div>
+      </div>
+    `);
+  }, [layers.satellites, iss]);
 
   return (
     <div className="relative w-full h-full">

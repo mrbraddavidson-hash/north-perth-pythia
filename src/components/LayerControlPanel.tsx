@@ -13,6 +13,8 @@ import {
   Satellite,
   Sliders,
   Check,
+  Wind,
+  Crosshair,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -56,12 +58,28 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
       badge: 'LIVE WMS',
     },
     {
+      key: 'squall',
+      label: 'Huron Squall Streamers',
+      sublabel: 'Lake Effect Vector Model',
+      icon: <Wind className="w-4 h-4" />,
+      color: 'text-blue-400',
+      badge: 'SQUALL',
+    },
+    {
       key: 'flights',
       label: 'Airspace Overhead',
       sublabel: 'OpenSky Network ADS-B',
       icon: <Plane className="w-4 h-4" />,
       color: 'text-amber-400',
       badge: `${flightCount} ACTIVE`,
+    },
+    {
+      key: 'helipad',
+      label: 'LMH Hospital Helipad',
+      sublabel: 'Listowel Memorial (CPN5)',
+      icon: <Crosshair className="w-4 h-4" />,
+      color: 'text-rose-400',
+      badge: 'CPN5',
     },
     {
       key: 'river',

@@ -99,7 +99,9 @@ export interface SchoolBusAlert {
 export interface ActiveLayers {
   towns: boolean;
   radar: boolean;
+  squall: boolean;
   flights: boolean;
+  helipad: boolean;
   river: boolean;
   cams: boolean;
   roads: boolean;

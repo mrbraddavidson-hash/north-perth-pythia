@@ -4,6 +4,8 @@ import { LayerControlPanel } from './components/LayerControlPanel';
 import { RightIntelPanel } from './components/RightIntelPanel';
 import { MapView } from './components/Map';
 import { KeySetupModal } from './components/KeySetupModal';
+import { SpaceWeatherBar } from './components/SpaceWeatherBar';
+import { AgriFuelModal } from './components/AgriFuelModal';
 import {
   ActiveLayers,
   FlightData,
@@ -27,10 +29,12 @@ import {
   getSchoolBusAlerts,
   NORTH_PERTH_COORDS,
 } from './services/api';
-import { Layers, Activity, X } from 'lucide-react';
+import { fetchAuroraKp, fetchLiveIss, AuroraData, IssTelemetry } from './services/space';
+import { calculateSquallTrajectory, SquallTrajectory } from './services/squall';
+import { Layers, Activity, X, Sprout } from 'lucide-react';
 
 export function App() {
-  // 511 API Key state (defaults to user's registered key)
+  // 511 API Key state
   const [apiKey, setApiKey] = useState<string>(() => {
     return (
       (typeof window !== 'undefined' ? localStorage.getItem('ONTARIO_511_KEY') : null) ||
@@ -38,6 +42,7 @@ export function App() {
     );
   });
   const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
+  const [isAgriModalOpen, setIsAgriModalOpen] = useState<boolean>(false);
 
   // Mobile drawer states: 'none' | 'layers' | 'intel'
   const [mobileDrawer, setMobileDrawer] = useState<'none' | 'layers' | 'intel'>('none');
@@ -46,7 +51,9 @@ export function App() {
   const [layers, setLayers] = useState<ActiveLayers>({
     towns: true,
     radar: true,
+    squall: true,
     flights: true,
+    helipad: true,
     river: true,
     cams: true,
     roads: true,
@@ -54,13 +61,13 @@ export function App() {
     hydro: true,
     dispatches: true,
     buses: true,
-    satellites: false,
+    satellites: true,
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
   const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
 
-  // Data states
+  // Live Data states
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>([]);
   const [weather, setWeather] = useState<WeatherTelemetry | null>(null);
@@ -69,27 +76,45 @@ export function App() {
   const [outages, setOutages] = useState<HydroOutage[]>([]);
   const [dispatches, setDispatches] = useState<EmergencyDispatch[]>([]);
   const [buses, setBuses] = useState<SchoolBusAlert[]>([]);
+  const [aurora, setAurora] = useState<AuroraData | null>(null);
+  const [iss, setIss] = useState<IssTelemetry | null>(null);
+  const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Load static & dynamic feeds
+  // Load all live feeds
   const refreshAllFeeds = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [flightsData, riverData, weatherData, camsData, roadsData] = await Promise.all([
-        fetchLiveFlights(),
-        fetchRiverGauges(),
-        fetchWeatherTelemetry(),
-        fetchTrafficCameras(apiKey),
-        fetchRoadConditions(apiKey),
-      ]);
+      const [flightsData, riverData, weatherData, camsData, roadsData, auroraData, issData] =
+        await Promise.all([
+          fetchLiveFlights(),
+          fetchRiverGauges(),
+          fetchWeatherTelemetry(),
+          fetchTrafficCameras(apiKey),
+          fetchRoadConditions(apiKey),
+          fetchAuroraKp(),
+          fetchLiveIss(),
+        ]);
 
       setFlights(flightsData);
       setRiverGauges(riverData);
       setWeather(weatherData);
       setCameras(camsData);
       setRoads(roadsData);
+      setAurora(auroraData);
+      setIss(issData);
 
-      // Static / local municipal feeds
+      // Compute squall trajectory based on live wind and temperature
+      if (weatherData) {
+        const squall = calculateSquallTrajectory(
+          weatherData.windDirectionDeg,
+          weatherData.windSpeedKmh,
+          weatherData.temperatureC
+        );
+        setSquallTrajectory(squall);
+      }
+
+      // Local municipal & safety feeds
       setOutages(getHydroOutages());
       setDispatches(getEmergencyDispatches());
       setBuses(getSchoolBusAlerts());
@@ -130,8 +155,19 @@ export function App() {
   const handleSelectFlight = (flight: FlightData | null) => {
     setSelectedFlight(flight);
     if (flight) {
-      // Close drawer on mobile so user sees the aircraft on map
       setMobileDrawer('none');
+    }
+  };
+
+  const handleTrackIss = () => {
+    if (iss) {
+      setLayers((prev) => ({ ...prev, satellites: true }));
+      // Focus map on ISS coordinates
+      window.dispatchEvent(
+        new CustomEvent('focus-coordinates', {
+          detail: { coords: [iss.latitude, iss.longitude], zoom: 4 },
+        })
+      );
     }
   };
 
@@ -150,12 +186,22 @@ export function App() {
         onOpenKeyModal={() => setIsKeyModalOpen(true)}
       />
 
+      {/* Space Weather & Aurora Kp Ticker */}
+      <SpaceWeatherBar aurora={aurora} iss={iss} onTrackIss={handleTrackIss} />
+
       {/* Key Setup Modal */}
       <KeySetupModal
         isOpen={isKeyModalOpen}
         onClose={() => setIsKeyModalOpen(false)}
         onSaveKey={handleSaveApiKey}
         currentKey={apiKey}
+      />
+
+      {/* Agri & Fuel Intel Modal */}
+      <AgriFuelModal
+        isOpen={isAgriModalOpen}
+        onClose={() => setIsAgriModalOpen(false)}
+        weather={weather}
       />
 
       {/* Main Workspace */}
@@ -171,7 +217,7 @@ export function App() {
           />
         </div>
 
-        {/* Central Tactical Map (Full screen on mobile) */}
+        {/* Central Tactical Map HUD */}
         <main className="flex-1 relative h-full w-full overflow-hidden">
           <MapView
             layers={layers}
@@ -183,26 +229,44 @@ export function App() {
             selectedFlight={selectedFlight}
             onSelectFlight={handleSelectFlight}
             radarOpacity={radarOpacity}
+            squallTrajectory={squallTrajectory}
+            iss={iss}
           />
 
-          {/* Mobile Quick Floating Drawer Toggles (Top Corners) */}
-          <div className="lg:hidden absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
-            <button
-              onClick={() => setMobileDrawer((prev) => (prev === 'layers' ? 'none' : 'layers'))}
-              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-cyan-500/50 text-cyan-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform"
-            >
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Layers</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-            </button>
+          {/* Quick Floating Toggles (Desktop & Mobile) */}
+          <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+            {/* Left Buttons: Mobile Drawer + Agri Modal Trigger */}
+            <div className="flex items-center gap-2 pointer-events-auto">
+              <button
+                onClick={() => setMobileDrawer((prev) => (prev === 'layers' ? 'none' : 'layers'))}
+                className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-cyan-500/50 text-cyan-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Layers</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+              </button>
 
-            <button
-              onClick={() => setMobileDrawer((prev) => (prev === 'intel' ? 'none' : 'intel'))}
-              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform"
-            >
-              <Activity className="w-3.5 h-3.5 text-amber-400" />
-              <span>Sitrep / Planes ({flights.length})</span>
-            </button>
+              <button
+                onClick={() => setIsAgriModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                title="Open Delta-T Spraying Window & Grain Bids"
+              >
+                <Sprout className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Delta-T / Agri</span>
+                <span className="sm:hidden">Agri</span>
+              </button>
+            </div>
+
+            {/* Right Buttons: Mobile Sitrep Drawer */}
+            <div className="lg:hidden pointer-events-auto">
+              <button
+                onClick={() => setMobileDrawer((prev) => (prev === 'intel' ? 'none' : 'intel'))}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform cursor-pointer"
+              >
+                <Activity className="w-3.5 h-3.5 text-amber-400" />
+                <span>Sitrep ({flights.length})</span>
+              </button>
+            </div>
           </div>
         </main>
 
@@ -217,16 +281,14 @@ export function App() {
             buses={buses}
             selectedFlight={selectedFlight}
             onSelectFlight={handleSelectFlight}
+            onOpenAgriModal={() => setIsAgriModalOpen(true)}
           />
         </div>
 
-        {/* MOBILE Slide-out Overlay Drawer (Layers) */}
+        {/* MOBILE Slide-out Drawer: Layers */}
         {mobileDrawer === 'layers' && (
           <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
-            <div
-              className="absolute inset-0"
-              onClick={() => setMobileDrawer('none')}
-            />
+            <div className="absolute inset-0" onClick={() => setMobileDrawer('none')} />
             <div className="relative z-50 w-full max-h-[80dvh] flex flex-col bg-slate-950 border-t border-cyan-500/40 shadow-2xl animate-slide-up rounded-t-xl overflow-hidden">
               <div className="flex items-center justify-between p-3 border-b border-cyan-500/20 bg-slate-900/80">
                 <div className="flex items-center gap-2">
@@ -255,19 +317,16 @@ export function App() {
           </div>
         )}
 
-        {/* MOBILE Slide-out Overlay Drawer (Intel / Sitrep / Airspace) */}
+        {/* MOBILE Slide-out Drawer: Intel & Radio Scanner */}
         {mobileDrawer === 'intel' && (
           <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
-            <div
-              className="absolute inset-0"
-              onClick={() => setMobileDrawer('none')}
-            />
+            <div className="absolute inset-0" onClick={() => setMobileDrawer('none')} />
             <div className="relative z-50 w-full max-h-[82dvh] flex flex-col bg-slate-950 border-t border-amber-500/40 shadow-2xl animate-slide-up rounded-t-xl overflow-hidden">
               <div className="flex items-center justify-between p-3 border-b border-amber-500/20 bg-slate-900/80">
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-amber-400" />
                   <span className="font-tactical text-sm font-bold text-white tracking-wider">
-                    SITREP & AIRSPACE
+                    SITREP, SCANNER & AIRSPACE
                   </span>
                 </div>
                 <button
@@ -287,6 +346,10 @@ export function App() {
                   buses={buses}
                   selectedFlight={selectedFlight}
                   onSelectFlight={handleSelectFlight}
+                  onOpenAgriModal={() => {
+                    setMobileDrawer('none');
+                    setIsAgriModalOpen(true);
+                  }}
                 />
               </div>
             </div>

@@ -11,6 +11,8 @@ import {
   TrendingUp,
   Clock,
   Sparkles,
+  Sprout,
+  HeartPulse,
 } from 'lucide-react';
 import {
   FlightData,
@@ -20,6 +22,7 @@ import {
   EmergencyDispatch,
   SchoolBusAlert,
 } from '../services/types';
+import { ScannerAudioWidget } from './ScannerAudioWidget';
 
 interface RightIntelPanelProps {
   weather: WeatherTelemetry | null;
@@ -30,6 +33,7 @@ interface RightIntelPanelProps {
   buses: SchoolBusAlert[];
   selectedFlight: FlightData | null;
   onSelectFlight: (flight: FlightData | null) => void;
+  onOpenAgriModal: () => void;
 }
 
 export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
@@ -41,10 +45,12 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   buses,
   selectedFlight,
   onSelectFlight,
+  onOpenAgriModal,
 }) => {
   const [activeTab, setActiveTab] = useState<'oracle' | 'airspace' | 'logs'>('oracle');
 
   const mainGauge = riverGauges.find((g) => g.stationId === '02FE003') || riverGauges[0];
+  const orngeFlight = flights.find((f) => f.callsign.includes('ORNGE') || f.callsign.includes('MEDEVAC'));
 
   return (
     <aside className="w-96 flex-shrink-0 flex flex-col bg-slate-950/90 border-l border-cyan-500/20 backdrop-blur-md overflow-hidden z-20">
@@ -52,7 +58,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
       <div className="flex items-center border-b border-cyan-500/20 bg-slate-900/50">
         <button
           onClick={() => setActiveTab('oracle')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
             activeTab === 'oracle'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -63,7 +69,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('airspace')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
             activeTab === 'airspace'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -74,14 +80,14 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('logs')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
             activeTab === 'logs'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          INCIDENTS
+          SCANNER / LOGS
         </button>
       </div>
 
@@ -90,6 +96,24 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
         {/* TAB 1: AI SITREP (PYTHIA ORACLE) */}
         {activeTab === 'oracle' && (
           <div className="space-y-3">
+            {/* Ornge Medevac Priority Banner if detected */}
+            {orngeFlight && (
+              <div className="p-2.5 rounded bg-rose-950/70 border border-rose-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse">
+                <div className="flex items-center justify-between text-xs font-bold text-rose-300">
+                  <span className="flex items-center gap-1.5">
+                    <HeartPulse className="w-4 h-4 text-rose-400" />
+                    ORNGE MEDEVAC INBOUND // LMH
+                  </span>
+                  <span className="text-[10px] bg-rose-900 px-1.5 py-0.5 rounded text-white">
+                    {orngeFlight.distanceKmToListowel} km out
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-300 mt-1">
+                  Helicopter {orngeFlight.callsign} inbound to Listowel Memorial Hospital (CPN5). Helipad landing sector active.
+                </div>
+              </div>
+            )}
+
             {/* Threat/Status Badge */}
             <div className="p-3 rounded bg-slate-900/80 border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] tactical-box">
               <div className="flex items-center justify-between">
@@ -103,6 +127,18 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                 squall signatures on Exeter Doppler radar. Middle Maitland River depth is within normal baseline.
               </p>
             </div>
+
+            {/* Quick Action Button for Agri & Economic Intel */}
+            <button
+              onClick={onOpenAgriModal}
+              className="w-full flex items-center justify-between p-2.5 rounded bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-semibold cursor-pointer transition-all shadow-sm"
+            >
+              <div className="flex items-center gap-2">
+                <Sprout className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs">AGRI, DELTA-T & GRAIN BIDS</span>
+              </div>
+              <ChevronRight className="w-4 h-4" />
+            </button>
 
             {/* Persona Council Assessments */}
             <div className="space-y-2">
@@ -225,9 +261,12 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 3: INCIDENTS & DISPATCHES */}
+        {/* TAB 3: INCIDENTS, DISPATCHES & RADIO SCANNER */}
         {activeTab === 'logs' && (
           <div className="space-y-3">
+            {/* Live Perth Radio Scanner Player */}
+            <ScannerAudioWidget />
+
             {/* Dispatches */}
             <div className="space-y-1.5">
               <span className="text-[10px] font-tactical tracking-wider text-orange-400">
