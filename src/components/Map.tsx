@@ -84,9 +84,11 @@ export const MapView: React.FC<MapProps> = ({
   const satRoadsRef = useRef<L.TileLayer | null>(null);
   const topoBaseRef = useRef<L.TileLayer | null>(null);
   const radarLayerRef = useRef<L.TileLayer | null>(null);
+  const ecccRadarLayerRef = useRef<L.TileLayer.WMS | null>(null);
   const droughtLayerRef = useRef<L.TileLayer.WMS | null>(null);
 
   // Live Doppler Weather Radar State (Exeter Composite Mesh)
+  const [radarEngine, setRadarEngine] = useState<'loop' | 'eccc'>('loop');
   const [radarData, setRadarData] = useState<RadarData | null>(null);
   const [radarFrameIndex, setRadarFrameIndex] = useState<number>(-1);
   const [isPlayingRadar, setIsPlayingRadar] = useState<boolean>(false);
@@ -187,16 +189,35 @@ export const MapView: React.FC<MapProps> = ({
     incidentsGroupRef.current = L.layerGroup().addTo(map);
     seismicGroupRef.current = L.layerGroup().addTo(map);
 
-    // Live High-Res Doppler Precipitation Radar (RainViewer CDN / Exeter Composite Mesh)
+    // 1. RainViewer High-Res Animated Doppler Loop (maxNativeZoom: 7 for crisp upscaling without errors)
     const initialRadarUrl = 'https://tilecache.rainviewer.com/v2/radar/now/256/{z}/{x}/{y}/2/1_1.png';
     const radarTile = L.tileLayer(initialRadarUrl, {
-      maxZoom: 18,
+      maxZoom: 19,
+      maxNativeZoom: 7, // CRITICAL: RainViewer free tier caps native zoom at 7; Leaflet upscales smoothly above zoom 7
       opacity: radarOpacity,
       zIndex: 20,
+      attribution: '© RainViewer / Exeter WSO Doppler',
     });
     radarLayerRef.current = radarTile;
+
+    // 2. Environment Canada GeoMet 1km High-Res Native Radar
+    const ecccRadar = L.tileLayer.wms('https://geo.weather.gc.ca/geomet', {
+      layers: 'RADAR_1KM_RRAI',
+      format: 'image/png',
+      transparent: true,
+      opacity: radarOpacity,
+      zIndex: 20,
+      maxZoom: 19,
+      attribution: '© Environment Canada GeoMet Radar',
+    });
+    ecccRadarLayerRef.current = ecccRadar;
+
     if (layers.radar) {
-      radarTile.addTo(map);
+      if (radarEngine === 'loop') {
+        radarTile.addTo(map);
+      } else {
+        ecccRadar.addTo(map);
+      }
     }
 
     // Agriculture and Agri-Food Canada (AAFC) Drought Monitor WMS
@@ -284,20 +305,26 @@ export const MapView: React.FC<MapProps> = ({
     }
   }, [mapStyle]);
 
-  // Update Radar Layer Visibility & Opacity
+  // Update Radar Layer Visibility, Engine & Opacity
   useEffect(() => {
-    if (!mapInstanceRef.current || !radarLayerRef.current) return;
+    if (!mapInstanceRef.current || !radarLayerRef.current || !ecccRadarLayerRef.current) return;
+    const map = mapInstanceRef.current;
     radarLayerRef.current.setOpacity(radarOpacity);
+    ecccRadarLayerRef.current.setOpacity(radarOpacity);
+
     if (layers.radar) {
-      if (!mapInstanceRef.current.hasLayer(radarLayerRef.current)) {
-        radarLayerRef.current.addTo(mapInstanceRef.current);
+      if (radarEngine === 'loop') {
+        if (map.hasLayer(ecccRadarLayerRef.current)) map.removeLayer(ecccRadarLayerRef.current);
+        if (!map.hasLayer(radarLayerRef.current)) radarLayerRef.current.addTo(map);
+      } else {
+        if (map.hasLayer(radarLayerRef.current)) map.removeLayer(radarLayerRef.current);
+        if (!map.hasLayer(ecccRadarLayerRef.current)) ecccRadarLayerRef.current.addTo(map);
       }
     } else {
-      if (mapInstanceRef.current.hasLayer(radarLayerRef.current)) {
-        mapInstanceRef.current.removeLayer(radarLayerRef.current);
-      }
+      if (map.hasLayer(radarLayerRef.current)) map.removeLayer(radarLayerRef.current);
+      if (map.hasLayer(ecccRadarLayerRef.current)) map.removeLayer(ecccRadarLayerRef.current);
     }
-  }, [layers.radar, radarOpacity]);
+  }, [layers.radar, radarOpacity, radarEngine]);
 
   // Fetch live radar metadata on mount & 3-minute poll
   useEffect(() => {
@@ -956,14 +983,40 @@ export const MapView: React.FC<MapProps> = ({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
               <span className="text-[11px] font-tactical font-bold text-white tracking-wider">
-                LIVE DOPPLER // EXETER COMPOSITE
+                {radarEngine === 'loop' ? 'EXETER COMPOSITE LOOP' : 'ECCC 1KM NATIVE RADAR'}
               </span>
             </div>
-            <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30">
-              {radarFrameIndex >= 0 && radarData.frames[radarFrameIndex]
-                ? radarData.frames[radarFrameIndex].formattedTime
-                : 'LIVE'}
-            </span>
+            <div className="flex items-center gap-1">
+              <div className="flex items-center bg-black/60 rounded border border-slate-800 p-0.5">
+                <button
+                  onClick={() => setRadarEngine('loop')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
+                    radarEngine === 'loop'
+                      ? 'bg-cyan-500 text-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  LOOP
+                </button>
+                <button
+                  onClick={() => setRadarEngine('eccc')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
+                    radarEngine === 'eccc'
+                      ? 'bg-cyan-500 text-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  ECCC 1KM
+                </button>
+              </div>
+              <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                {radarEngine === 'loop'
+                  ? radarFrameIndex >= 0 && radarData.frames[radarFrameIndex]
+                    ? radarData.frames[radarFrameIndex].formattedTime
+                    : 'LIVE'
+                  : 'NATIVE ECCC'}
+              </span>
+            </div>
           </div>
 
           {/* Controls Bar */}
