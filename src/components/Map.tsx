@@ -63,6 +63,7 @@ export const MapView: React.FC<MapProps> = ({
   const satRoadsRef = useRef<L.TileLayer | null>(null);
   const topoBaseRef = useRef<L.TileLayer | null>(null);
   const radarLayerRef = useRef<L.TileLayer.WMS | null>(null);
+  const droughtLayerRef = useRef<L.TileLayer.WMS | null>(null);
 
   // Layer groups
   const townsGroupRef = useRef<L.LayerGroup | null>(null);
@@ -172,6 +173,22 @@ export const MapView: React.FC<MapProps> = ({
       radarWms.addTo(map);
     }
 
+    // Agriculture and Agri-Food Canada (AAFC) Drought Monitor WMS
+    const droughtWms = L.tileLayer.wms(
+      'https://agriculture.canada.ca/imagery-images/services/canadian_drought_monitor/ImageServer/WMSServer',
+      {
+        layers: 'canadian_drought_monitor:canadian_drought_monitor',
+        format: 'image/png',
+        transparent: true,
+        opacity: 0.65,
+        zIndex: 19,
+      }
+    );
+    droughtLayerRef.current = droughtWms;
+    if (layers.drought) {
+      droughtWms.addTo(map);
+    }
+
     mapInstanceRef.current = map;
 
     // Ensure map tiles calculate correct pixel sizes on mobile and orientation changes
@@ -255,6 +272,20 @@ export const MapView: React.FC<MapProps> = ({
       }
     }
   }, [layers.radar, radarOpacity]);
+
+  // Update AAFC Drought Monitor Layer Visibility
+  useEffect(() => {
+    if (!mapInstanceRef.current || !droughtLayerRef.current) return;
+    if (layers.drought) {
+      if (!mapInstanceRef.current.hasLayer(droughtLayerRef.current)) {
+        droughtLayerRef.current.addTo(mapInstanceRef.current);
+      }
+    } else {
+      if (mapInstanceRef.current.hasLayer(droughtLayerRef.current)) {
+        mapInstanceRef.current.removeLayer(droughtLayerRef.current);
+      }
+    }
+  }, [layers.drought]);
 
   // Handle flight selection: fly to coordinates
   useEffect(() => {

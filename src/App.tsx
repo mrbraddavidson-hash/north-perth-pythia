@@ -71,6 +71,7 @@ export function App() {
     satellites: true,
     seismic: true,
     hazards: true,
+    drought: false,
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
@@ -344,6 +345,8 @@ export function App() {
         isOpen={isAgriModalOpen}
         onClose={() => setIsAgriModalOpen(false)}
         weather={weather}
+        isDroughtLayerActive={Boolean(layers.drought)}
+        onToggleDroughtLayer={() => handleToggleLayer('drought')}
       />
 
       {/* Main Workspace */}

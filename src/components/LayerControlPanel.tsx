@@ -16,6 +16,7 @@ import {
   Wind,
   Crosshair,
   Activity,
+  Sprout,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -113,6 +114,14 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
       icon: <Activity className="w-4 h-4" />,
       color: 'text-amber-400',
       badge: 'USGS LIVE',
+    },
+    {
+      key: 'drought',
+      label: 'Canadian Drought Monitor',
+      sublabel: 'AAFC National Spatial WMS',
+      icon: <Sprout className="w-4 h-4" />,
+      color: 'text-amber-500',
+      badge: 'AAFC CDM',
     },
     {
       key: 'satellites',

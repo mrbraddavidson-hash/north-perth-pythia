@@ -129,6 +129,7 @@ export interface ActiveLayers {
   satellites: boolean;
   seismic?: boolean;
   hazards?: boolean;
+  drought?: boolean;
 }
 
 export interface MvcaWatershedBulletin {
