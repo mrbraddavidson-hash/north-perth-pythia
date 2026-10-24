@@ -26,13 +26,6 @@ import {
   fetchRoadConditions,
   fetchLive511Incidents,
   DEFAULT_ONTARIO_511_KEY,
-  getHydroOutages,
-  getEmergencyDispatches,
-  getSchoolBusAlerts,
-  getFallbackFlights,
-  getFallbackRiverGauges,
-  getFallbackTrafficCameras,
-  getRoadConditions,
   NORTH_PERTH_COORDS,
 } from './services/api';
 import { fetchAuroraKp, fetchLiveIss, AuroraData, IssTelemetry } from './services/space';
@@ -75,15 +68,15 @@ export function App() {
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
   const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
 
-  // Live Data states with instant 0ms baseline hydration
-  const [flights, setFlights] = useState<FlightData[]>(getFallbackFlights);
-  const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>(getFallbackRiverGauges);
+  // Live Data states (empty initial state - strictly no simulated baseline)
+  const [flights, setFlights] = useState<FlightData[]>([]);
+  const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>([]);
   const [weather, setWeather] = useState<WeatherTelemetry | null>(null);
-  const [cameras, setCameras] = useState<TrafficCamera[]>(getFallbackTrafficCameras);
-  const [roads, setRoads] = useState<RoadCondition[]>(getRoadConditions);
-  const [outages, setOutages] = useState<HydroOutage[]>(getHydroOutages);
-  const [dispatches, setDispatches] = useState<EmergencyDispatch[]>(getEmergencyDispatches);
-  const [buses, setBuses] = useState<SchoolBusAlert[]>(getSchoolBusAlerts);
+  const [cameras, setCameras] = useState<TrafficCamera[]>([]);
+  const [roads, setRoads] = useState<RoadCondition[]>([]);
+  const [outages, setOutages] = useState<HydroOutage[]>([]);
+  const [dispatches, setDispatches] = useState<EmergencyDispatch[]>([]);
+  const [buses, setBuses] = useState<SchoolBusAlert[]>([]);
   const [aurora, setAurora] = useState<AuroraData | null>(null);
   const [iss, setIss] = useState<IssTelemetry | null>(null);
   const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
@@ -125,10 +118,7 @@ export function App() {
       if (results[6].status === 'fulfilled') setIss(results[6].value);
       if (results[7].status === 'fulfilled') setIncidents(results[7].value);
 
-      // Local municipal & safety feeds
-      setOutages(getHydroOutages());
-      setDispatches(getEmergencyDispatches());
-      setBuses(getSchoolBusAlerts());
+
     } catch (err) {
       console.error('Error refreshing feeds:', err);
     } finally {

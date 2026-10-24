@@ -98,72 +98,14 @@ export function calculateSprayWindow(tempC: number, rhPercent: number, windKmh: 
   };
 }
 
-// 2. Grain elevator bids for North Perth (P&H Listowel & Hensall Co-op)
+// 2. Grain elevator bids (Empty to prevent fabricating agricultural commodity pricing)
 export function getLocalGrainBids(): GrainBid[] {
-  return [
-    {
-      commodity: 'Corn (Feed/Grain)',
-      pricePerTonne: 206.5,
-      pricePerBushel: 5.24,
-      elevator: 'P&H Listowel Elevator',
-      change24h: 1.2,
-    },
-    {
-      commodity: 'Soybeans (IP / Non-GMO)',
-      pricePerTonne: 482.0,
-      pricePerBushel: 13.12,
-      elevator: 'Hensall District Co-op',
-      change24h: -0.4,
-    },
-    {
-      commodity: 'Soft Red Winter Wheat',
-      pricePerTonne: 248.8,
-      pricePerBushel: 6.77,
-      elevator: 'P&H Listowel Elevator',
-      change24h: 0.8,
-    },
-    {
-      commodity: 'Canola',
-      pricePerTonne: 592.0,
-      pricePerBushel: 13.43,
-      elevator: 'Hensall District Co-op',
-      change24h: 2.1,
-    },
-  ];
+  return [];
 }
 
-// 3. North Perth Fuel prices (Wallace Ave Corridor)
+// 3. North Perth Fuel prices (Empty to prevent fabricating retail fuel pump rates)
 export function getListowelFuelPrices(): FuelPrice[] {
-  return [
-    {
-      station: 'Petro-Canada (Wallace Ave N)',
-      regular: 148.9,
-      diesel: 154.9,
-      premium: 169.9,
-      lastUpdated: 'Today',
-    },
-    {
-      station: 'Esso / Circle K (Main St E / Hwy 86)',
-      regular: 147.9,
-      diesel: 153.9,
-      premium: 168.9,
-      lastUpdated: 'Today',
-    },
-    {
-      station: 'Canadian Tire Gas+ (Mitchell Rd S)',
-      regular: 146.9,
-      diesel: 152.9,
-      premium: 167.9,
-      lastUpdated: 'Today',
-    },
-    {
-      station: 'Pioneer Energy (Line 86 West)',
-      regular: 147.2,
-      diesel: 153.5,
-      premium: 168.2,
-      lastUpdated: 'Today',
-    },
-  ];
+  return [];
 }
 
 // 4. Burn permit status (North Perth Fire Department)

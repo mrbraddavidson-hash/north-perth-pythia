@@ -318,10 +318,10 @@ export async function fetchRiverGauges(): Promise<RiverGaugeData[]> {
       setCached('wateroffice-gauges', validGauges, 4 * 60 * 1000);
       return validGauges;
     }
-    return getFallbackRiverGauges();
+    return [];
   } catch (err) {
     console.warn('WaterOffice hydrometric feed error:', err);
-    return getFallbackRiverGauges();
+    return [];
   }
 }
 
@@ -439,7 +439,7 @@ export async function fetchTrafficCameras(apiKey?: string): Promise<TrafficCamer
     }
   }
 
-  return getFallbackTrafficCameras();
+  return [];
 }
 
 export async function fetchRoadConditions(apiKey?: string): Promise<RoadCondition[]> {
@@ -492,7 +492,7 @@ export async function fetchRoadConditions(apiKey?: string): Promise<RoadConditio
     }
   }
 
-  return getRoadConditions();
+  return [];
 }
 
 function getIncidentDistanceFromListowel(lat: number, lon: number): number {
@@ -601,269 +601,42 @@ export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncide
   return [];
 }
 
-function getFallbackRoadCoords(roadway: string): [number, number][] {
-  if (roadway.includes('23')) {
-    return [
-      [43.595, -81.085], // Monkton
-      [43.665, -81.015], // Atwood
-      [43.7317, -80.9525], // Listowel
-      [43.834, -80.849], // Palmerston
-    ];
-  }
-  return [
-    [43.7317, -80.9525],
-    [43.735, -81.04],
-    [43.742, -81.18],
-  ];
+function getFallbackRoadCoords(_roadway: string): [number, number][] {
+  return [];
 }
 
 export function getFallbackTrafficCameras(): TrafficCamera[] {
-  return [
-    {
-      id: 'cam-hwy78-stratford',
-      name: 'Hwy 7/8 Corridor at Stratford (Perth Cty)',
-      highway: 'Hwy 7/8',
-      latitude: 43.375,
-      longitude: -80.985,
-      imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80',
-      lastUpdated: 'Ontario 511 CCTV Feed (Keyless Preview)',
-      direction: 'Eastbound towards Kitchener / Westbound to Stratford',
-    },
-    {
-      id: 'cam-hwy78-newhamburg',
-      name: 'Hwy 7/8 at New Hamburg / Baden',
-      highway: 'Hwy 7/8',
-      latitude: 43.435,
-      longitude: -80.715,
-      imageUrl: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=600&auto=format&fit=crop&q=80',
-      lastUpdated: 'Ontario 511 CCTV Feed (Keyless Preview)',
-      direction: 'Eastbound towards Highway 401',
-    },
-    {
-      id: 'cam-hwy21-goderich',
-      name: 'Hwy 21 Lake Huron Corridor (Goderich)',
-      highway: 'Hwy 21',
-      latitude: 43.742,
-      longitude: -81.712,
-      imageUrl: 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=600&auto=format&fit=crop&q=80',
-      lastUpdated: 'Ontario 511 CCTV Feed (Keyless Preview)',
-      direction: 'Northbound towards Kincardine / South to Grand Bend',
-    },
-    {
-      id: 'cam-hwy86-elmira',
-      name: 'Hwy 86 at Elmira East Junction',
-      highway: 'Hwy 86',
-      latitude: 43.598,
-      longitude: -80.555,
-      imageUrl: 'https://images.unsplash.com/photo-1494783367193-149034c05e8f?w=600&auto=format&fit=crop&q=80',
-      lastUpdated: 'Ontario 511 CCTV Feed (Keyless Preview)',
-      direction: 'Westbound towards Listowel / Eastbound to Waterloo',
-    },
-  ];
+  return [];
 }
 
-// 5. Road conditions along North Perth routes
+// Road conditions fallback (empty to prevent fabricating road states)
 export function getRoadConditions(): RoadCondition[] {
-  return [
-    {
-      id: 'road-hwy23-listowel-palmerston',
-      highway: 'Hwy 23',
-      segment: 'Listowel to Palmerston (Township Border)',
-      status: 'BARE_DRY',
-      visibility: 'GOOD',
-      driftingSnow: false,
-      lastUpdated: '12m ago (MTO Patrol)',
-      coords: [
-        [43.7317, -80.9525],
-        [43.765, -80.925],
-        [43.834, -80.849],
-      ],
-    },
-    {
-      id: 'road-hwy86-listowel-wingham',
-      highway: 'Hwy 86',
-      segment: 'Listowel West to Molesworth / Wingham',
-      status: 'BARE_DRY',
-      visibility: 'GOOD',
-      driftingSnow: false,
-      lastUpdated: '25m ago (MTO Patrol)',
-      coords: [
-        [43.7317, -80.9525],
-        [43.735, -81.04],
-        [43.742, -81.18],
-      ],
-    },
-    {
-      id: 'road-hwy23-listowel-mitchell',
-      highway: 'Hwy 23',
-      segment: 'Listowel South to Monkton & Mitchell',
-      status: 'BARE_DRY',
-      visibility: 'GOOD',
-      driftingSnow: false,
-      lastUpdated: '18m ago (Perth County Roads)',
-      coords: [
-        [43.7317, -80.9525],
-        [43.665, -81.015],
-        [43.595, -81.085],
-      ],
-    },
-  ];
+  return [];
 }
 
-// 6. Hydro One Outages in Perth County
+// Hydro One Outages: Disabled simulated outages to preserve strict data integrity
 export function getHydroOutages(): HydroOutage[] {
-  return [
-    {
-      id: 'hydro-np-01',
-      location: 'Atwood East / Perth Line 72',
-      latitude: 43.685,
-      longitude: -80.975,
-      customersAffected: 24,
-      status: 'CREW_ASSIGNED',
-      cause: 'Scheduled Maintenance / Transformer Inspection',
-      estimatedRestoration: 'Today 16:30 EDT',
-    },
-  ];
+  return [];
 }
 
-// 7. Emergency dispatches (OPP & North Perth Fire)
+// Emergency dispatches: Disabled simulated CAD calls to preserve strict data integrity
 export function getEmergencyDispatches(): EmergencyDispatch[] {
-  return [
-    {
-      id: 'disp-np-001',
-      agency: 'NP_FIRE',
-      type: 'CONTROLLED BURN PERMIT / MONITOR',
-      location: 'Line 84 near Gowanstown',
-      timestamp: '11:42 EDT',
-      status: 'ACTIVE',
-      details: 'Permitted agricultural field clearing. No structure threat.',
-    },
-    {
-      id: 'disp-opp-002',
-      agency: 'OPP',
-      type: 'TRAFFIC HAZARD // DEBRIS CLEARED',
-      location: 'Hwy 86 west of Listowel Golf Club',
-      timestamp: '10:15 EDT',
-      status: 'RESOLVED',
-      details: 'Loose tire tread removed from roadway. Traffic moving smoothly.',
-    },
-    {
-      id: 'disp-paramedic-003',
-      agency: 'PARAMEDIC',
-      type: 'MEDICAL EVAC STANDBY // LISTOWEL MEMORIAL',
-      location: 'Listowel Memorial Hospital Helipad',
-      timestamp: '08:50 EDT',
-      status: 'RESOLVED',
-      details: 'Patient transfer rendezvous completed via Ornge Rotary 793.',
-    },
-  ];
+  return [];
 }
 
-// 8. HPSTS School Bus status for North Perth (Zone 3)
+// HPSTS School Bus status: Disabled simulated schedules to preserve strict data integrity
 export function getSchoolBusAlerts(): SchoolBusAlert[] {
-  return [
-    {
-      zone: 'Zone 3 (North Perth / Listowel)',
-      title: 'ALL ROUTES OPERATIONAL',
-      status: 'RUNNING_ON_TIME',
-      affectedSchools: [
-        'Listowel District Secondary School (LDSS)',
-        'North Perth Westfield Elementary',
-        'St. Marys Catholic School',
-        'Elma Township Public School',
-      ],
-      notice: 'Road conditions optimal. All morning & afternoon runs on regular schedule.',
-    },
-  ];
+  return [];
 }
 
-// Fallback simulated aircraft when network/CORS blocks direct OpenSky calls
+// Aircraft: Disabled simulated flights to preserve strict data integrity
 export function getFallbackFlights(): FlightData[] {
-  return [
-    {
-      icao24: 'c01fa2',
-      callsign: 'ORNGE793',
-      originCountry: 'Canada',
-      latitude: 43.722,
-      longitude: -80.941,
-      altitudeMeters: 450,
-      altitudeFeet: 1476,
-      velocityKmh: 240,
-      trackHeading: 142,
-      verticalRate: -1.2,
-      onGround: false,
-      squawk: '1200',
-      distanceKmToListowel: 1.4,
-    },
-    {
-      icao24: 'a3d829',
-      callsign: 'ENY3600',
-      originCountry: 'United States',
-      latitude: 43.965,
-      longitude: -80.96,
-      altitudeMeters: 9753,
-      altitudeFeet: 32000,
-      velocityKmh: 899,
-      trackHeading: 241,
-      verticalRate: 0.1,
-      onGround: false,
-      squawk: '0642',
-      distanceKmToListowel: 25.9,
-    },
-    {
-      icao24: 'ab3133',
-      callsign: 'DAL1766',
-      originCountry: 'United States',
-      latitude: 43.662,
-      longitude: -81.015,
-      altitudeMeters: 10363,
-      altitudeFeet: 34000,
-      velocityKmh: 812,
-      trackHeading: 281,
-      verticalRate: 0,
-      onGround: false,
-      squawk: '3552',
-      distanceKmToListowel: 9.3,
-    },
-    {
-      icao24: 'c0528b',
-      callsign: 'C-GLIS',
-      originCountry: 'Canada',
-      latitude: 43.698,
-      longitude: -80.895,
-      altitudeMeters: 760,
-      altitudeFeet: 2500,
-      velocityKmh: 195,
-      trackHeading: 310,
-      verticalRate: 0.2,
-      onGround: false,
-      squawk: '1200',
-      distanceKmToListowel: 5.9,
-    },
-  ];
+  return [];
 }
 
+// River Gauges: Disabled simulated hydrometric numbers to preserve strict data integrity
 export function getFallbackRiverGauges(): RiverGaugeData[] {
-  return [
-    {
-      stationId: '02FE003',
-      stationName: 'Middle Maitland River near Listowel',
-      timestamp: new Date().toISOString(),
-      waterLevelMeters: 6.799,
-      dischargeM3s: 0.16,
-      floodStageAlert: 'NORMAL',
-      trend: 'STABLE',
-    },
-    {
-      stationId: '02FE011',
-      stationName: 'Maitland River near Harriston',
-      timestamp: new Date().toISOString(),
-      waterLevelMeters: 4.12,
-      dischargeM3s: 0.35,
-      floodStageAlert: 'NORMAL',
-      trend: 'STABLE',
-    },
-  ];
+  return [];
 }
 
 // 9. Maitland Valley Conservation Authority (MVCA) Watershed Assessment
@@ -978,36 +751,8 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
   return alerts;
 }
 
-// 11. Perth County & North Perth Municipal Public Works Notices
-export function getMunicipalNotices() {
-  return [
-    {
-      id: 'np-infra-01',
-      category: 'INFRASTRUCTURE' as const,
-      title: 'Line 87 Bridge & Culvert Rehabilitation',
-      location: 'Line 87 between Road 164 & Road 165',
-      status: 'ACTIVE' as const,
-      date: 'Fall Infrastructure Project',
-      details: 'Single lane traffic alternating with yield signage. Commercial agricultural vehicles wide loads observe reduced clearance.',
-    },
-    {
-      id: 'np-infra-02',
-      category: 'WINTER_PATROL' as const,
-      title: 'North Perth Winter Road Maintenance Standby',
-      location: 'Listowel, Elma & Wallace Wards (Class 1-3 Roads)',
-      status: 'ACTIVE' as const,
-      date: 'Seasonal Protocol',
-      details: 'Plows and salters stationed at Listowel and Monkton public works depots. GPS automatic vehicle location (AVL) synced with MTO.',
-    },
-    {
-      id: 'np-infra-03',
-      category: 'WATER_WORKS' as const,
-      title: 'Municipal Hydrant & Main Flushing Program',
-      location: 'Listowel East Sector // Wallace Ave North',
-      status: 'SCHEDULED' as const,
-      date: 'Routine Maintenance',
-      details: 'North Perth Environmental Services conducting seasonal water main pressure checks. Minor water discoloration temporary.',
-    },
-  ];
+// 11. Perth County & North Perth Municipal Public Works Notices (Empty to prevent fabricating municipal maintenance schedules)
+export function getMunicipalNotices(): any[] {
+  return [];
 }
 

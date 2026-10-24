@@ -61,10 +61,10 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({ isOpen, onClose, w
           </div>
           <div>
             <h2 className="font-tactical text-base font-bold text-white tracking-wider flex items-center gap-2">
-              NORTH PERTH // AGRI & ECONOMIC INTEL
+              NORTH PERTH // AGRONOMY & DELTA-T INTEL
             </h2>
             <p className="text-[11px] text-slate-400">
-              Spray Windows • P&H Grain Bids • Wallace Ave Fuel • Burn Permits
+              Live Stull Delta-T Spray Windows • Evaporation Risk • ECCC Atmosphere
             </p>
           </div>
         </div>
@@ -188,72 +188,27 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({ isOpen, onClose, w
 
           {/* TAB 2: GRAIN COMMODITY BIDS */}
           {activeTab === 'grain' && (
-            <div className="space-y-2">
-              <div className="text-[10px] text-slate-400 pb-1 flex items-center justify-between">
-                <span>COMMODITY & ELEVATOR</span>
-                <span>CASH BID ($/TONNE & $/BU)</span>
+            <div className="p-4 rounded border border-slate-800 bg-slate-900/50 text-slate-400 text-xs space-y-2">
+              <div className="font-semibold text-slate-200 flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-emerald-400" />
+                LOCAL ELEVATOR CASH BIDS
               </div>
-              {grainBids.map((bid, i) => (
-                <div
-                  key={i}
-                  className="p-2.5 rounded bg-slate-900/70 border border-slate-800 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="font-bold text-slate-100 text-xs">{bid.commodity}</div>
-                    <div className="text-[10px] text-slate-400">{bid.elevator}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold text-emerald-400">
-                      ${bid.pricePerTonne.toFixed(2)} / t{' '}
-                      <span className="text-white">(${bid.pricePerBushel.toFixed(2)}/bu)</span>
-                    </div>
-                    <div
-                      className={`text-[10px] flex items-center justify-end gap-0.5 ${
-                        bid.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {bid.change24h >= 0 ? (
-                        <TrendingUp className="w-2.5 h-2.5" />
-                      ) : (
-                        <TrendingDown className="w-2.5 h-2.5" />
-                      )}
-                      <span>
-                        {bid.change24h >= 0 ? '+' : ''}
-                        {bid.change24h}% 24h
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <p className="text-slate-400 leading-relaxed text-[11px]">
+                Neither Parrish & Heimbecker (Listowel) nor Hensall Co-op publish an unauthenticated public JSON API for real-time local cash elevator bids. Fabricated pricing has been removed to preserve strict data integrity.
+              </p>
             </div>
           )}
 
           {/* TAB 3: LISTOWEL FUEL PRICES */}
           {activeTab === 'fuel' && (
-            <div className="space-y-2">
-              <div className="text-[10px] text-slate-400 pb-1 flex items-center justify-between">
-                <span>STATION (WALLACE AVE / LINE 86)</span>
-                <span>REGULAR / DIESEL</span>
+            <div className="p-4 rounded border border-slate-800 bg-slate-900/50 text-slate-400 text-xs space-y-2">
+              <div className="font-semibold text-slate-200 flex items-center gap-2">
+                <Fuel className="w-4 h-4 text-amber-400" />
+                WALLACE AVE RETAIL FUEL
               </div>
-              {fuelPrices.map((station, i) => (
-                <div
-                  key={i}
-                  className="p-2.5 rounded bg-slate-900/70 border border-slate-800 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="font-bold text-slate-100 text-xs">{station.station}</div>
-                    <div className="text-[10px] text-slate-500">Updated: {station.lastUpdated}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold text-cyan-300">
-                      REG: <span className="text-white">{station.regular}¢</span> / L
-                    </div>
-                    <div className="text-[11px] text-slate-300">
-                      DIESEL: <span className="text-amber-400 font-semibold">{station.diesel}¢</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <p className="text-slate-400 leading-relaxed text-[11px]">
+                Local retail gas stations along Highway 86 and Wallace Ave do not publish open REST APIs for real-time pump prices. Simulated estimates have been removed to preserve strict data integrity.
+              </p>
             </div>
           )}
         </div>
