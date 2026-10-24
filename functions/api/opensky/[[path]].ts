@@ -3,26 +3,32 @@ export const onRequest: PagesFunction = async (context) => {
   const targetPath = url.pathname.replace(/^\/api\/opensky/, '/api');
   const targetUrl = `https://opensky-network.org${targetPath}${url.search}`;
 
-  const headers = new Headers(context.request.headers);
-  headers.set('User-Agent', 'Mozilla/5.0 (North Perth Pythia)');
-  headers.delete('host');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
 
   try {
     const response = await fetch(targetUrl, {
       method: context.request.method,
-      headers,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (North Perth Pythia)',
+      },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
-    const responseHeaders = new Headers(response.headers);
-    responseHeaders.set('Access-Control-Allow-Origin', '*');
-
-    return new Response(response.body, {
+    const data = await response.text();
+    return new Response(data, {
       status: response.status,
-      headers: responseHeaders,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 502,
+    clearTimeout(timeoutId);
+    return new Response(JSON.stringify({ error: err.message, states: [] }), {
+      status: 504,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }

@@ -181,27 +181,26 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               </div>
               <div className="text-[11px] font-semibold text-cyan-300">{mvca.headline}</div>
               <p className="text-[10px] text-slate-300 leading-relaxed">{mvca.details}</p>
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80 text-[10px]">
-                <div>
-                  <span className="text-slate-500">LISTOWEL GAUGE:</span>
-                  <div className="font-bold text-slate-200">
-                    {mainGauge?.waterLevelMeters.toFixed(2) ?? '6.80'}m ({mainGauge?.trend})
-                  </div>
+              
+              {/* Real-time Environment Canada hydrometric stations */}
+              <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[10px]">
+                <div className="text-slate-400 font-semibold text-[9px] uppercase tracking-wider flex items-center justify-between">
+                  <span>LIVE ECCC WATEROFFICE TELEMETRY</span>
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    ACTIVE
+                  </span>
                 </div>
-                <div>
-                  <span className="text-slate-500">SURCHARGE RISK:</span>
-                  <div
-                    className={`font-bold ${
-                      mvca.middleMaitlandRisk === 'CRITICAL'
-                        ? 'text-rose-400'
-                        : mvca.middleMaitlandRisk === 'HIGH'
-                        ? 'text-amber-400'
-                        : 'text-emerald-400'
-                    }`}
-                  >
-                    {mvca.middleMaitlandRisk}
+                {riverGauges.map((g) => (
+                  <div key={g.stationId} className="flex items-center justify-between p-1.5 rounded bg-slate-950/60 border border-slate-800">
+                    <span className="text-slate-300 truncate max-w-[170px]" title={g.stationName}>
+                      {g.stationName.replace('Middle Maitland River', 'Mid-Maitland').replace('Maitland River', 'Maitland')}
+                    </span>
+                    <span className="font-bold text-white font-mono">
+                      {g.waterLevelMeters.toFixed(2)}m <span className="text-slate-400 font-normal">({g.dischargeM3s.toFixed(2)} m³/s)</span>
+                    </span>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
 
@@ -279,56 +278,75 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 2: AIRSPACE (OPENSKY FLIGHTS) */}
+        {/* TAB 2: AIRSPACE (ADS-B LIVE RADAR) */}
         {activeTab === 'airspace' && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1">
-              <span>AIRCRAFT OVERHEAD</span>
-              <span>{flights.length} DETECTED</span>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">LIVE ADS-B RADAR</span>
+              </span>
+              <span className="text-[10px] font-mono text-cyan-400">{flights.length} DETECTED</span>
             </div>
 
-            {flights.map((flight) => {
-              const isSelected = selectedFlight?.icao24 === flight.icao24;
-              const isOrnge = flight.callsign.includes('ORNGE') || flight.callsign.includes('MEDEVAC');
+            {flights.length === 0 ? (
+              <div className="p-5 rounded border border-slate-800 bg-slate-900/40 text-center text-slate-400 text-xs space-y-1.5">
+                <Plane className="w-6 h-6 mx-auto text-slate-600 mb-1" />
+                <div className="font-semibold text-slate-300">NO TRANSPONDERS IN RANGE</div>
+                <div className="text-[10px] text-slate-500">Live receiver mesh listening (70 NM around Listowel)...</div>
+              </div>
+            ) : (
+              flights.map((flight) => {
+                const isSelected = selectedFlight?.icao24 === flight.icao24;
+                const isOrnge = flight.callsign.includes('ORNGE') || flight.callsign.includes('MEDEVAC');
 
-              return (
-                <div
-                  key={flight.icao24}
-                  onClick={() => onSelectFlight(isSelected ? null : flight)}
-                  className={`p-2.5 rounded border transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-cyan-950/80 border-cyan-400 text-cyan-100 shadow-[0_0_12px_rgba(0,242,254,0.3)]'
-                      : isOrnge
-                      ? 'bg-rose-950/40 border-rose-500/60 text-slate-200 hover:border-rose-400'
-                      : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between font-bold text-xs">
-                    <span className="flex items-center gap-1.5">
-                      <Plane className={`w-3.5 h-3.5 ${isOrnge ? 'text-rose-400' : 'text-cyan-400'}`} />
-                      {flight.callsign}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      {flight.distanceKmToListowel} km from Listowel
-                    </span>
+                return (
+                  <div
+                    key={flight.icao24}
+                    onClick={() => onSelectFlight(isSelected ? null : flight)}
+                    className={`p-2.5 rounded border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-950/80 border-cyan-400 text-cyan-100 shadow-[0_0_12px_rgba(0,242,254,0.3)]'
+                        : isOrnge
+                        ? 'bg-rose-950/40 border-rose-500/60 text-slate-200 hover:border-rose-400'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <Plane className={`w-3.5 h-3.5 ${isOrnge ? 'text-rose-400' : 'text-cyan-400'}`} />
+                        {flight.callsign}
+                        {flight.registration && flight.registration !== flight.callsign && (
+                          <span className="text-[9px] text-slate-400 font-normal">[{flight.registration}]</span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        {flight.distanceKmToListowel} km out
+                      </span>
+                    </div>
+                    {flight.aircraftType && (
+                      <div className="text-[10px] text-cyan-400/90 truncate mt-0.5 font-mono">
+                        {flight.aircraftType}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1.5 text-[10px] text-slate-400">
+                      <div>
+                        ALT: <span className="text-slate-200">{flight.altitudeFeet ? `${flight.altitudeFeet.toLocaleString()} ft` : 'Ground'}</span>
+                      </div>
+                      <div>
+                        SPEED: <span className="text-slate-200">{flight.velocityKmh ? `${flight.velocityKmh} km/h` : 'N/A'}</span>
+                      </div>
+                      <div>
+                        ORIGIN: <span className="text-slate-300">{flight.originCountry}</span>
+                      </div>
+                      <div>
+                        HEADING: <span className="text-slate-300">{flight.trackHeading ? `${flight.trackHeading}°` : 'N/A'}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1.5 text-[10px] text-slate-400">
-                    <div>
-                      ALT: <span className="text-slate-200">{flight.altitudeFeet ? `${flight.altitudeFeet.toLocaleString()} ft` : 'N/A'}</span>
-                    </div>
-                    <div>
-                      SPEED: <span className="text-slate-200">{flight.velocityKmh ?? 'N/A'} km/h</span>
-                    </div>
-                    <div>
-                      ORIGIN: <span className="text-slate-300">{flight.originCountry}</span>
-                    </div>
-                    <div>
-                      HEADING: <span className="text-slate-300">{flight.trackHeading ?? 'N/A'}°</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         )}
 
@@ -351,7 +369,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                   <Construction className="w-3.5 h-3.5 text-cyan-400" />
                   MUNICIPAL PUBLIC WORKS & INFRASTRUCTURE
                 </span>
-                <span className="text-[9px] text-slate-500">NORTH PERTH</span>
+                <span className="text-[9px] text-slate-500 font-mono">NORTH PERTH</span>
               </div>
               {municipalNotices.map((notice) => (
                 <div key={notice.id} className="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1">
@@ -369,9 +387,14 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
 
             {/* Dispatches */}
             <div className="space-y-1.5 pt-2 border-t border-slate-800">
-              <span className="text-[10px] font-tactical tracking-wider text-orange-400">
-                ACTIVE INCIDENTS & CALLS
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-tactical tracking-wider text-orange-400">
+                  ACTIVE INCIDENTS & CALLS
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-400 border border-amber-600/40 font-mono">
+                  ARCHIVED LOGS
+                </span>
+              </div>
               {dispatches.map((disp) => (
                 <div key={disp.id} className="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1">
                   <div className="flex items-center justify-between text-[11px]">
@@ -386,14 +409,19 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
 
             {/* School Bus Alert */}
             <div className="space-y-1.5 pt-2 border-t border-slate-800">
-              <span className="text-[10px] font-tactical tracking-wider text-yellow-400">
-                HPSTS SCHOOL TRANSPORT (ZONE 3)
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-tactical tracking-wider text-yellow-400">
+                  HPSTS SCHOOL TRANSPORT (ZONE 3)
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-400 border border-cyan-500/40 font-mono">
+                  DAILY SCHEDULE
+                </span>
+              </div>
               {buses.map((bus, idx) => (
                 <div key={idx} className="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="font-bold text-emerald-400">{bus.title}</span>
-                    <span className="text-[10px] text-emerald-300">VERIFIED</span>
+                    <span className="text-[10px] text-emerald-300">SCHEDULE</span>
                   </div>
                   <p className="text-[10px] text-slate-400">{bus.notice}</p>
                 </div>
@@ -402,9 +430,14 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
 
             {/* Outages */}
             <div className="space-y-1.5 pt-2 border-t border-slate-800">
-              <span className="text-[10px] font-tactical tracking-wider text-rose-400">
-                HYDRO ONE OUTAGE LOGS
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-tactical tracking-wider text-rose-400">
+                  HYDRO ONE OUTAGE LOGS
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-950/70 text-rose-400 border border-rose-600/40 font-mono">
+                  REGIONAL ADVISORY
+                </span>
+              </div>
               {outages.map((outage) => (
                 <div key={outage.id} className="p-2 rounded bg-rose-950/20 border border-rose-500/30 space-y-1">
                   <div className="flex items-center justify-between text-[11px]">

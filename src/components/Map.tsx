@@ -365,13 +365,17 @@ export const MapView: React.FC<MapProps> = ({
             <span class="font-bold text-cyan-400 text-sm">${flight.callsign}</span>
             <span class="text-[10px] text-slate-400">${flight.originCountry}</span>
           </div>
+          ${flight.aircraftType ? `<div class="text-[10px] text-slate-300 font-mono">${flight.aircraftType}</div>` : ''}
           <div class="grid grid-cols-2 gap-x-3 gap-y-1 pt-1 text-slate-300">
-            <div>ALT: <span class="text-white font-bold">${flight.altitudeFeet?.toLocaleString() ?? 'N/A'} ft</span></div>
+            <div>ALT: <span class="text-white font-bold">${flight.altitudeFeet?.toLocaleString() ?? 'Ground'} ft</span></div>
             <div>SPD: <span class="text-white font-bold">${flight.velocityKmh ?? 'N/A'} km/h</span></div>
             <div>HDG: <span class="text-white">${flight.trackHeading ?? 'N/A'}°</span></div>
             <div>SQUAWK: <span class="text-amber-400 font-bold">${flight.squawk ?? '1200'}</span></div>
             <div class="col-span-2 pt-1 border-t border-slate-800 text-cyan-300">
               DIST TO LISTOWEL: <span class="font-bold text-white">${flight.distanceKmToListowel} km</span>
+            </div>
+            <div class="col-span-2 text-[9px] text-emerald-400 font-bold">
+              • LIVE ADS-B TRANSPONDER
             </div>
           </div>
         </div>
@@ -387,15 +391,16 @@ export const MapView: React.FC<MapProps> = ({
     if (!layers.river) return;
 
     riverGauges.forEach((gauge) => {
-      const isListowel = gauge.stationId === '02FE003';
-      const coords: [number, number] = isListowel ? [43.727, -80.972] : [43.91, -80.87];
+      let coords: [number, number] = [43.727, -80.972]; // Listowel
+      if (gauge.stationId === '02FE011') coords = [43.913, -80.865]; // Harriston
+      else if (gauge.stationId === '02FE013') coords = [43.682, -81.144]; // Ethel
 
       const icon = L.divIcon({
         className: 'river-marker-icon',
         html: `
           <div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950/95 border-2 border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.4)] font-mono text-[11px] whitespace-nowrap cursor-pointer hover:scale-105 transition-transform pointer-events-auto">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>MAITLAND: ${gauge.waterLevelMeters.toFixed(2)}m</span>
+            <span>${gauge.stationId === '02FE003' ? 'LISTOWEL' : gauge.stationId === '02FE011' ? 'HARRISTON' : 'ETHEL'}: ${gauge.waterLevelMeters.toFixed(2)}m</span>
           </div>
         `,
         iconSize: [110, 26],
@@ -408,11 +413,11 @@ export const MapView: React.FC<MapProps> = ({
           <div class="font-bold text-emerald-400 text-sm border-b border-emerald-500/30 pb-1">
             ${gauge.stationName}
           </div>
-          <div class="text-[11px] text-slate-300">Station ID: <span class="text-white">${gauge.stationId}</span></div>
+          <div class="text-[11px] text-slate-300">Station ID: <span class="text-white font-bold">${gauge.stationId}</span></div>
           <div class="text-[11px] text-slate-300">Water Level: <span class="text-emerald-300 font-bold">${gauge.waterLevelMeters.toFixed(3)} m</span></div>
           <div class="text-[11px] text-slate-300">Discharge Flow: <span class="text-cyan-300 font-bold">${gauge.dischargeM3s.toFixed(3)} m³/s</span></div>
           <div class="text-[11px] text-slate-300">Status: <span class="text-emerald-400 font-semibold">${gauge.floodStageAlert}</span></div>
-          <div class="text-[10px] text-slate-400 pt-1">WaterOffice Canada Live Station</div>
+          <div class="text-[10px] text-emerald-400 pt-1 font-semibold">• LIVE WATEROFFICE TELEMETRY</div>
         </div>
       `);
     });

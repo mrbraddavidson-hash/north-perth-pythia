@@ -12,6 +12,8 @@ export interface FlightData {
   onGround: boolean;
   squawk: string | null;
   distanceKmToListowel: number;
+  aircraftType?: string;
+  registration?: string;
 }
 
 export interface RiverGaugeData {

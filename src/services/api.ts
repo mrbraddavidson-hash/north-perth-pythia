@@ -119,141 +119,208 @@ function setCached<T>(key: string, data: T, ttlMs: number): void {
   };
 }
 
-// 1. Fetch live flights from OpenSky Network
+// 1. Fetch live flights from open ADS-B mesh (adsb.fi) & OpenSky
 export async function fetchLiveFlights(): Promise<FlightData[]> {
-  const cached = getCached<FlightData[]>('opensky-flights');
+  const cached = getCached<FlightData[]>('live-flights');
   if (cached) return cached;
 
+  // Primary: adsb.fi Open Data API (high refresh, real transponders over North Perth / SW Ontario)
   try {
-    // Try via Vite proxy first, fallback to direct OpenSky
-    const proxyUrl = '/api/opensky/states/all?lamin=43.3&lomin=-81.6&lamax=44.2&lomax=-80.4';
-    const directUrl = 'https://opensky-network.org/api/states/all?lamin=43.3&lomin=-81.6&lamax=44.2&lomax=-80.4';
+    const url = '/api/adsb/lat/43.7317/lon/-80.9525/dist/70';
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      const rawList = Array.isArray(data?.ac) ? data.ac : Array.isArray(data?.aircraft) ? data.aircraft : [];
+      if (rawList.length > 0) {
+        const mapped: FlightData[] = rawList
+          .filter((a: any) => typeof a.lat === 'number' && typeof a.lon === 'number')
+          .map((a: any) => {
+            const callsign = (a.flight || a.r || a.hex || 'UNKN').trim();
+            const isCan = a.r?.startsWith('C-') || a.flight?.startsWith('ACA') || a.flight?.startsWith('WJA') || a.flight?.startsWith('POE');
+            const isUS = a.r?.startsWith('N') || a.flight?.startsWith('DAL') || a.flight?.startsWith('UAL') || a.flight?.startsWith('AAL');
+            const originCountry = isCan ? 'Canada' : isUS ? 'United States' : 'Civil Airspace';
 
-    let res: Response | null = null;
-    try {
-      res = await fetch(proxyUrl);
-      if (!res.ok) res = await fetch(directUrl);
-    } catch {
-      res = await fetch(directUrl);
+            const altFeet = typeof a.alt_baro === 'number' ? Math.round(a.alt_baro) : (typeof a.alt_geom === 'number' ? Math.round(a.alt_geom) : null);
+            const altMeters = altFeet !== null ? Math.round(altFeet * 0.3048) : null;
+            const velocityKmh = typeof a.gs === 'number' ? Math.round(a.gs * 1.852) : null;
+            const onGround = a.alt_baro === 'ground' || a.ground === true;
+            const dist = calculateDistanceKm(NORTH_PERTH_COORDS[0], NORTH_PERTH_COORDS[1], a.lat, a.lon);
+
+            return {
+              icao24: String(a.hex).toLowerCase(),
+              callsign,
+              originCountry,
+              latitude: a.lat,
+              longitude: a.lon,
+              altitudeMeters: altMeters,
+              altitudeFeet: altFeet,
+              velocityKmh,
+              trackHeading: typeof a.track === 'number' ? Math.round(a.track) : null,
+              verticalRate: typeof a.baro_rate === 'number' ? a.baro_rate : null,
+              onGround,
+              squawk: a.squawk ? String(a.squawk) : null,
+              distanceKmToListowel: dist,
+              aircraftType: a.t ? `${a.t}${a.desc ? ` - ${a.desc}` : ''}` : undefined,
+              registration: a.r || undefined,
+            };
+          })
+          .sort((a: FlightData, b: FlightData) => a.distanceKmToListowel - b.distanceKmToListowel)
+          .slice(0, 35);
+
+        if (mapped.length > 0) {
+          setCached('live-flights', mapped, 12 * 1000);
+          return mapped;
+        }
+      }
     }
-
-    if (!res || !res.ok) throw new Error('Failed to fetch from OpenSky');
-
-    const data = await res.json();
-    if (!data.states || !Array.isArray(data.states)) return getFallbackFlights();
-
-    const mapped = data.states.map((state: any[]) => {
-      const icao24 = state[0];
-      const callsign = (state[1] || 'UNKN').trim();
-      const originCountry = state[2] || 'Unknown';
-      const lon = state[5];
-      const lat = state[6];
-      const baroAlt = state[7]; // meters
-      const velocity = state[9]; // m/s
-      const track = state[10]; // degrees
-      const vertRate = state[11]; // m/s
-      const onGround = state[8] || false;
-      const squawk = state[14];
-
-      const dist = calculateDistanceKm(NORTH_PERTH_COORDS[0], NORTH_PERTH_COORDS[1], lat, lon);
-
-      return {
-        icao24,
-        callsign,
-        originCountry,
-        latitude: lat,
-        longitude: lon,
-        altitudeMeters: baroAlt ? Math.round(baroAlt) : null,
-        altitudeFeet: baroAlt ? Math.round(baroAlt * 3.28084) : null,
-        velocityKmh: velocity ? Math.round(velocity * 3.6) : null,
-        trackHeading: track !== null ? Math.round(track) : null,
-        verticalRate: vertRate,
-        onGround,
-        squawk,
-        distanceKmToListowel: dist,
-      };
-    });
-
-    setCached('opensky-flights', mapped, 20 * 1000);
-    return mapped;
   } catch (err) {
-    console.warn('OpenSky API unavailable, using simulated real-time telemetry:', err);
-    return getFallbackFlights();
+    console.warn('ADSB live feed unavailable:', err);
+  }
+
+  // Secondary fallback attempt: OpenSky Network
+  try {
+    const proxyUrl = '/api/opensky/states/all?lamin=43.3&lomin=-81.6&lamax=44.2&lomax=-80.4';
+    const res = await fetch(proxyUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.states) && data.states.length > 0) {
+        const mapped = data.states.map((state: any[]) => {
+          const icao24 = state[0];
+          const callsign = (state[1] || 'UNKN').trim();
+          const originCountry = state[2] || 'Unknown';
+          const lon = state[5];
+          const lat = state[6];
+          const baroAlt = state[7];
+          const velocity = state[9];
+          const track = state[10];
+          const vertRate = state[11];
+          const onGround = state[8] || false;
+          const squawk = state[14];
+
+          const dist = calculateDistanceKm(NORTH_PERTH_COORDS[0], NORTH_PERTH_COORDS[1], lat, lon);
+
+          return {
+            icao24,
+            callsign,
+            originCountry,
+            latitude: lat,
+            longitude: lon,
+            altitudeMeters: baroAlt ? Math.round(baroAlt) : null,
+            altitudeFeet: baroAlt ? Math.round(baroAlt * 3.28084) : null,
+            velocityKmh: velocity ? Math.round(velocity * 3.6) : null,
+            trackHeading: track !== null ? Math.round(track) : null,
+            verticalRate: vertRate,
+            onGround,
+            squawk,
+            distanceKmToListowel: dist,
+          };
+        });
+        setCached('live-flights', mapped, 15 * 1000);
+        return mapped;
+      }
+    }
+  } catch {
+    // Both failed
+  }
+
+  // Return empty array rather than faking static ghost planes
+  return [];
+}
+
+// 2. Fetch live hydrometric river gauges from Environment Canada / WaterOffice
+interface StationConfig {
+  id: string;
+  name: string;
+  warningLevel: number;
+  criticalLevel: number;
+  elevatedLevel: number;
+}
+
+const MAITLAND_STATIONS: StationConfig[] = [
+  {
+    id: '02FE003',
+    name: 'Middle Maitland River near Listowel',
+    elevatedLevel: 7.2,
+    warningLevel: 7.8,
+    criticalLevel: 8.5,
+  },
+  {
+    id: '02FE011',
+    name: 'Maitland River near Harriston',
+    elevatedLevel: 2.5,
+    warningLevel: 2.8,
+    criticalLevel: 3.5,
+  },
+  {
+    id: '02FE013',
+    name: 'Middle Maitland River above Ethel',
+    elevatedLevel: 4.5,
+    warningLevel: 4.8,
+    criticalLevel: 5.5,
+  },
+];
+
+async function fetchSingleStationGauge(station: StationConfig): Promise<RiverGaugeData | null> {
+  try {
+    const proxyUrl = `/api/wateroffice/csv/ON/hourly/ON_${station.id}_hourly_hydrometric.csv`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) return null;
+    const text = await res.text();
+    const lines = text.trim().split('\n').filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return null;
+
+    const lastLine = lines[lines.length - 1];
+    const prevLine = lines.length > 5 ? lines[lines.length - 5] : lines[lines.length - 2];
+    const parts = lastLine.split(',');
+    const prevParts = prevLine ? prevLine.split(',') : parts;
+
+    const timestamp = parts[1] || new Date().toISOString();
+    const waterLevel = parseFloat(parts[2]) || 0;
+    const discharge = parseFloat(parts[6]) || 0;
+    const prevWaterLevel = parseFloat(prevParts[2]) || waterLevel;
+
+    let alert: RiverGaugeData['floodStageAlert'] = 'NORMAL';
+    if (waterLevel >= station.criticalLevel) alert = 'CRITICAL';
+    else if (waterLevel >= station.warningLevel) alert = 'WARNING';
+    else if (waterLevel >= station.elevatedLevel) alert = 'ELEVATED';
+
+    let trend: RiverGaugeData['trend'] = 'STABLE';
+    const diff = waterLevel - prevWaterLevel;
+    if (diff > 0.05) trend = 'RISING';
+    else if (diff < -0.05) trend = 'FALLING';
+
+    return {
+      stationId: station.id,
+      stationName: station.name,
+      timestamp,
+      waterLevelMeters: Math.round(waterLevel * 100) / 100,
+      dischargeM3s: Math.round(discharge * 1000) / 1000,
+      floodStageAlert: alert,
+      trend,
+    };
+  } catch {
+    return null;
   }
 }
 
-// 2. Fetch live hydrometric river gauge from Environment Canada / WaterOffice
 export async function fetchRiverGauges(): Promise<RiverGaugeData[]> {
   const cached = getCached<RiverGaugeData[]>('wateroffice-gauges');
   if (cached) return cached;
 
   try {
-    const proxyUrl = '/api/wateroffice/csv/ON/hourly/ON_02FE003_hourly_hydrometric.csv';
-    const directUrl = 'https://dd.weather.gc.ca/today/hydrometric/csv/ON/hourly/ON_02FE003_hourly_hydrometric.csv';
+    const promises = MAITLAND_STATIONS.map((st) => fetchSingleStationGauge(st));
+    const results = await Promise.allSettled(promises);
+    const validGauges = results
+      .filter((r): r is PromiseFulfilledResult<RiverGaugeData | null> => r.status === 'fulfilled' && r.value !== null)
+      .map((r) => r.value as RiverGaugeData);
 
-    let text = '';
-    try {
-      const res = await fetch(proxyUrl);
-      if (res.ok) text = await res.text();
-    } catch {
-      // fallback
-    }
-
-    if (!text) {
-      const res2 = await fetch(directUrl);
-      if (res2.ok) text = await res2.text();
-    }
-
-    if (text) {
-      const lines = text.trim().split('\n').filter((l) => l.trim().length > 0);
-      if (lines.length > 1) {
-        const lastLine = lines[lines.length - 1];
-        const parts = lastLine.split(',');
-        const timestamp = parts[1] || new Date().toISOString();
-        const waterLevel = parseFloat(parts[2]) || 6.8;
-        const discharge = parseFloat(parts[6]) || 0.16;
-
-        let alert: RiverGaugeData['floodStageAlert'] = 'NORMAL';
-        if (waterLevel > 8.5) alert = 'CRITICAL';
-        else if (waterLevel > 7.8) alert = 'WARNING';
-        else if (waterLevel > 7.2) alert = 'ELEVATED';
-
-        const result: RiverGaugeData[] = [
-          {
-            stationId: '02FE003',
-            stationName: 'Middle Maitland River near Listowel',
-            timestamp,
-            waterLevelMeters: waterLevel,
-            dischargeM3s: discharge,
-            floodStageAlert: alert,
-            trend: 'STABLE',
-          },
-          {
-            stationId: '02FE011',
-            stationName: 'Maitland River near Harriston',
-            timestamp,
-            waterLevelMeters: 4.12,
-            dischargeM3s: 0.35,
-            floodStageAlert: 'NORMAL',
-            trend: 'STABLE',
-          },
-          {
-            stationId: '02FE013',
-            stationName: 'Middle Maitland River above Ethel',
-            timestamp,
-            waterLevelMeters: 2.45,
-            dischargeM3s: 0.28,
-            floodStageAlert: 'NORMAL',
-            trend: 'FALLING',
-          },
-        ];
-        setCached('wateroffice-gauges', result, 5 * 60 * 1000);
-        return result;
-      }
+    if (validGauges.length > 0) {
+      setCached('wateroffice-gauges', validGauges, 4 * 60 * 1000);
+      return validGauges;
     }
     return getFallbackRiverGauges();
   } catch (err) {
-    console.warn('WaterOffice hydrometric feed fallback:', err);
+    console.warn('WaterOffice hydrometric feed error:', err);
     return getFallbackRiverGauges();
   }
 }
@@ -521,7 +588,7 @@ export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncide
                 distanceKmToListowel: getIncidentDistanceFromListowel(lat, lon),
               };
             })
-            .sort((a, b) => a.distanceKmToListowel - b.distanceKmToListowel);
+            .sort((a: any, b: any) => a.distanceKmToListowel - b.distanceKmToListowel);
 
           setCached('511-incidents', results, 60 * 1000);
           return results;

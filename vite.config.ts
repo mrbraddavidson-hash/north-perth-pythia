@@ -10,6 +10,11 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      '/api/adsb': {
+        target: 'https://opendata.adsb.fi',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/adsb/, '/api/v2'),
+      },
       '/api/opensky': {
         target: 'https://opensky-network.org',
         changeOrigin: true,
