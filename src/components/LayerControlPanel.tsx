@@ -17,6 +17,7 @@ import {
   Crosshair,
   Activity,
   Sprout,
+  Ship,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -26,6 +27,7 @@ interface LayerControlPanelProps {
   radarOpacity: number;
   onChangeRadarOpacity: (val: number) => void;
   flightCount: number;
+  vesselCount?: number;
 }
 
 export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
@@ -34,6 +36,7 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
   radarOpacity,
   onChangeRadarOpacity,
   flightCount,
+  vesselCount = 0,
 }) => {
   const layerItems: {
     key: keyof ActiveLayers;
@@ -74,6 +77,14 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
       icon: <Plane className="w-4 h-4" />,
       color: 'text-amber-400',
       badge: `${flightCount} TRACKED`,
+    },
+    {
+      key: 'maritime',
+      label: 'Lake Huron Maritime AIS',
+      sublabel: 'Goderich Port & Seaway Mesh',
+      icon: <Ship className="w-4 h-4" />,
+      color: 'text-teal-400',
+      badge: `${vesselCount} SHIPS`,
     },
     {
       key: 'helipad',

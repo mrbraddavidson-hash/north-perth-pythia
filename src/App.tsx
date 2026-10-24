@@ -17,7 +17,9 @@ import {
   EmergencyDispatch,
   SchoolBusAlert,
   LiveIncidentEvent,
+  OpticMode,
 } from './services/types';
+import { fetchLiveLakeHuronVessels, MaritimeVessel } from './services/maritime';
 import {
   fetchLiveFlights,
   fetchRiverGauges,
@@ -72,13 +74,17 @@ export function App() {
     seismic: true,
     hazards: true,
     drought: false,
+    maritime: true,
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
   const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
+  const [selectedVessel, setSelectedVessel] = useState<MaritimeVessel | null>(null);
+  const [opticMode, setOpticMode] = useState<OpticMode>('normal');
 
   // Live Data states (empty initial state - strictly no simulated baseline)
   const [flights, setFlights] = useState<FlightData[]>([]);
+  const [vessels, setVessels] = useState<MaritimeVessel[]>([]);
   const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>([]);
   const [weather, setWeather] = useState<WeatherTelemetry | null>(null);
   const [cameras, setCameras] = useState<TrafficCamera[]>([]);
@@ -109,6 +115,7 @@ export function App() {
         fetchLive511Incidents(apiKey),
         fetchLiveEarthquakes(),
         fetchLiveNASAEvents(),
+        fetchLiveLakeHuronVessels(),
       ]);
 
       if (results[0].status === 'fulfilled') setFlights(results[0].value);
@@ -132,6 +139,7 @@ export function App() {
       if (results[7].status === 'fulfilled') setIncidents(results[7].value);
       if (results[8].status === 'fulfilled') setEarthquakes(results[8].value);
       if (results[9].status === 'fulfilled') setNasaEvents(results[9].value);
+      if (results[10].status === 'fulfilled') setVessels(results[10].value);
 
 
     } catch (err) {
@@ -327,6 +335,8 @@ export function App() {
         hasApiKey={Boolean(apiKey)}
         onOpenKeyModal={() => setIsKeyModalOpen(true)}
         criticalAlert={criticalAlert}
+        opticMode={opticMode}
+        onChangeOpticMode={setOpticMode}
       />
 
       {/* Space Weather & Aurora Kp Ticker */}
@@ -359,6 +369,7 @@ export function App() {
             radarOpacity={radarOpacity}
             onChangeRadarOpacity={setRadarOpacity}
             flightCount={flights.length}
+            vesselCount={vessels.length}
           />
         </div>
 
@@ -379,6 +390,11 @@ export function App() {
             incidents={incidents}
             earthquakes={earthquakes}
             onApplyPreset={handleApplyPreset}
+            vessels={vessels}
+            opticMode={opticMode}
+            onChangeOpticMode={setOpticMode}
+            selectedVessel={selectedVessel}
+            onSelectVessel={setSelectedVessel}
           />
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
@@ -412,7 +428,7 @@ export function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform cursor-pointer"
               >
                 <Activity className="w-3.5 h-3.5 text-amber-400" />
-                <span>Sitrep ({flights.length})</span>
+                <span>Sitrep ({flights.length + vessels.length})</span>
               </button>
             </div>
           </div>
@@ -433,6 +449,9 @@ export function App() {
             selectedFlight={selectedFlight}
             onSelectFlight={handleSelectFlight}
             onOpenAgriModal={() => setIsAgriModalOpen(true)}
+            vessels={vessels}
+            selectedVessel={selectedVessel}
+            onSelectVessel={setSelectedVessel}
           />
         </div>
 
@@ -462,6 +481,7 @@ export function App() {
                   radarOpacity={radarOpacity}
                   onChangeRadarOpacity={setRadarOpacity}
                   flightCount={flights.length}
+                  vesselCount={vessels.length}
                 />
               </div>
             </div>
@@ -504,6 +524,9 @@ export function App() {
                     setMobileDrawer('none');
                     setIsAgriModalOpen(true);
                   }}
+                  vessels={vessels}
+                  selectedVessel={selectedVessel}
+                  onSelectVessel={setSelectedVessel}
                 />
               </div>
             </div>

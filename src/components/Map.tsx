@@ -13,6 +13,8 @@ import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS, TownMarker } from '../services/a
 import { LISTOWEL_HELIPAD_COORDS, SquallTrajectory } from '../services/squall';
 import { IssTelemetry } from '../services/space';
 import { SeismicEvent } from '../services/hazards';
+import { MaritimeVessel } from '../services/maritime';
+import { OpticMode } from '../services/types';
 import {
   fetchLiveRadarData,
   getRadarTileUrl,
@@ -34,6 +36,11 @@ import {
   SkipBack,
   SkipForward,
   CloudRain,
+  Ship,
+  Target,
+  Lock,
+  Unlock,
+  X,
 } from 'lucide-react';
 
 interface MapProps {
@@ -51,6 +58,11 @@ interface MapProps {
   incidents?: LiveIncidentEvent[];
   earthquakes?: SeismicEvent[];
   onApplyPreset?: (preset: 'all' | 'weather' | 'corridors' | 'airspace') => void;
+  vessels?: MaritimeVessel[];
+  opticMode?: OpticMode;
+  onChangeOpticMode?: (mode: OpticMode) => void;
+  selectedVessel?: MaritimeVessel | null;
+  onSelectVessel?: (vessel: MaritimeVessel | null) => void;
 }
 
 type MapStyle = 'tactical' | 'streets' | 'satellite' | 'topo';
@@ -70,6 +82,11 @@ export const MapView: React.FC<MapProps> = ({
   incidents = [],
   earthquakes = [],
   onApplyPreset,
+  vessels = [],
+  opticMode = 'normal',
+  onChangeOpticMode,
+  selectedVessel = null,
+  onSelectVessel,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -106,6 +123,8 @@ export const MapView: React.FC<MapProps> = ({
   const issGroupRef = useRef<L.LayerGroup | null>(null);
   const incidentsGroupRef = useRef<L.LayerGroup | null>(null);
   const seismicGroupRef = useRef<L.LayerGroup | null>(null);
+  const vesselsGroupRef = useRef<L.LayerGroup | null>(null);
+  const [cameraTrackLock, setCameraTrackLock] = useState<boolean>(false);
 
   // Initialize Map
   useEffect(() => {
@@ -188,6 +207,7 @@ export const MapView: React.FC<MapProps> = ({
     issGroupRef.current = L.layerGroup().addTo(map);
     incidentsGroupRef.current = L.layerGroup().addTo(map);
     seismicGroupRef.current = L.layerGroup().addTo(map);
+    vesselsGroupRef.current = L.layerGroup().addTo(map);
 
     // 1. RainViewer High-Res Animated Doppler Loop (maxNativeZoom: 7 for crisp upscaling without errors)
     const initialRadarUrl = 'https://tilecache.rainviewer.com/v2/radar/now/256/{z}/{x}/{y}/2/1_1.png';
@@ -305,6 +325,16 @@ export const MapView: React.FC<MapProps> = ({
     }
   }, [mapStyle]);
 
+  // Apply God's Eye Optic Shader (bilawalsidhu/gods-eye-view)
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+    container.classList.remove('optic-flir', 'optic-nvg', 'optic-crt');
+    if (opticMode === 'flir') container.classList.add('optic-flir');
+    else if (opticMode === 'nvg') container.classList.add('optic-nvg');
+    else if (opticMode === 'crt') container.classList.add('optic-crt');
+  }, [opticMode]);
+
   // Update Radar Layer Visibility, Engine & Opacity
   useEffect(() => {
     if (!mapInstanceRef.current || !radarLayerRef.current || !ecccRadarLayerRef.current) return;
@@ -376,13 +406,35 @@ export const MapView: React.FC<MapProps> = ({
     }
   }, [layers.drought]);
 
-  // Handle flight selection: fly to coordinates
+  // Handle target selection (God's Eye Target Follow & FlyTo)
   useEffect(() => {
-    if (!mapInstanceRef.current || !selectedFlight) return;
-    mapInstanceRef.current.flyTo([selectedFlight.latitude, selectedFlight.longitude], 12, {
-      duration: 1.2,
-    });
-  }, [selectedFlight]);
+    if (!mapInstanceRef.current) return;
+    if (selectedFlight) {
+      mapInstanceRef.current.flyTo([selectedFlight.latitude, selectedFlight.longitude], 12, {
+        duration: 1.2,
+      });
+    } else if (selectedVessel) {
+      mapInstanceRef.current.flyTo([selectedVessel.latitude, selectedVessel.longitude], 11, {
+        duration: 1.2,
+      });
+    }
+  }, [selectedFlight, selectedVessel]);
+
+  // Camera Track Lock (Continuous following if enabled)
+  useEffect(() => {
+    if (!cameraTrackLock || !mapInstanceRef.current) return;
+    if (selectedFlight) {
+      mapInstanceRef.current.panTo([selectedFlight.latitude, selectedFlight.longitude], { animate: true });
+    } else if (selectedVessel) {
+      mapInstanceRef.current.panTo([selectedVessel.latitude, selectedVessel.longitude], { animate: true });
+    }
+  }, [
+    cameraTrackLock,
+    selectedFlight?.latitude,
+    selectedFlight?.longitude,
+    selectedVessel?.latitude,
+    selectedVessel?.longitude,
+  ]);
 
   // Render North Perth Town & Sector Labels
   useEffect(() => {
@@ -507,6 +559,78 @@ export const MapView: React.FC<MapProps> = ({
       `);
     });
   }, [flights, layers.flights, selectedFlight]);
+
+  // Render Lake Huron Maritime AIS Vessels (God's Eye Maritime Layer)
+  useEffect(() => {
+    if (!vesselsGroupRef.current || !mapInstanceRef.current) return;
+    vesselsGroupRef.current.clearLayers();
+    if (!layers.maritime) return;
+
+    vessels.forEach((vessel) => {
+      const isSelected = selectedVessel?.mmsi === vessel.mmsi;
+      const isCargo = vessel.vesselTypeCategory === 'CARGO';
+      const isGov = vessel.vesselTypeCategory === 'GOV_LAW';
+      const isTanker = vessel.vesselTypeCategory === 'TANKER';
+      const isTug = vessel.vesselTypeCategory === 'TUG';
+
+      const color = isGov ? '#ef4444' : isCargo ? '#00f2fe' : isTanker ? '#f59e0b' : isTug ? '#a855f7' : '#10b981';
+
+      const shipSvg = `
+        <div class="relative group cursor-pointer pointer-events-auto">
+          ${isSelected ? '<div class="absolute -inset-2 rounded-full border-2 border-dashed border-cyan-400 target-lock-ring"></div>' : ''}
+          <div class="flex items-center justify-center w-7 h-7 rounded-full bg-slate-950/90 border-2 shadow-lg" style="border-color: ${color};">
+            <svg class="w-4 h-4" style="color: ${color}; transform: rotate(${vessel.headingDeg}deg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+              <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/>
+              <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/>
+              <path d="M12 10V2"/>
+              <path d="M12 2 8 6"/>
+              <path d="M12 2l4 4"/>
+            </svg>
+          </div>
+          <div class="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-950/95 text-[9px] font-mono px-1.5 py-0.2 rounded border border-slate-700 text-slate-300 font-bold group-hover:border-cyan-400 shadow-md">
+            ${vessel.name.substring(0, 12)}
+          </div>
+        </div>
+      `;
+
+      const icon = L.divIcon({
+        className: 'vessel-marker-icon',
+        html: shipSvg,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+
+      const marker = L.marker([vessel.latitude, vessel.longitude], { icon, zIndexOffset: 70 })
+        .addTo(vesselsGroupRef.current!)
+        .on('click', () => {
+          if (onSelectVessel) onSelectVessel(vessel);
+        });
+
+      marker.bindPopup(`
+        <div class="p-2 space-y-1 text-xs font-mono">
+          <div class="flex items-center justify-between border-b border-cyan-500/30 pb-1">
+            <span class="font-bold text-cyan-400 text-sm">${vessel.name}</span>
+            <span class="text-[9px] px-1 rounded bg-slate-800 text-slate-300 font-bold">${vessel.flag || 'AIS'}</span>
+          </div>
+          <div class="text-[10px] text-slate-300 font-tactical">${vessel.vesselType}</div>
+          <div class="grid grid-cols-2 gap-x-2 gap-y-0.5 pt-1 text-[10px] text-slate-300">
+            <div>SPD: <span class="text-white font-bold">${vessel.speedKnots} kts</span></div>
+            <div>HDG: <span class="text-white font-bold">${vessel.headingDeg}°</span></div>
+            <div>MMSI: <span class="text-slate-400">${vessel.mmsi}</span></div>
+            <div>DEST: <span class="text-slate-400">${vessel.destination || 'LAKE HURON'}</span></div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-cyan-300 pt-1 border-t border-slate-800">
+            <span>Range: ${vessel.distanceKmToListowel} km (${Math.round(vessel.distanceKmToListowel * 0.54)} NM)</span>
+            <span>Brg: ${vessel.bearingFromListowelDeg}°</span>
+          </div>
+          <div class="text-[9px] text-emerald-400 font-bold pt-0.5">
+            • LIVE OPENWATERS AIS STREAM
+          </div>
+        </div>
+      `);
+    });
+  }, [vessels, layers.maritime, selectedVessel]);
 
   // Render River Gauges (Middle Maitland River)
   useEffect(() => {
@@ -971,6 +1095,100 @@ export const MapView: React.FC<MapProps> = ({
           >
             AIRSPACE
           </button>
+        </div>
+      )}
+
+      {/* God's Eye Target Acquisition & Tracking Lock Card (bilawalsidhu/gods-eye-view) */}
+      {(selectedFlight || selectedVessel) && (
+        <div className="absolute top-14 sm:top-16 right-3 sm:right-4 z-20 bg-slate-950/95 border border-cyan-400 rounded-lg p-3 font-mono shadow-[0_0_30px_rgba(0,242,254,0.25)] backdrop-blur-md w-72 sm:w-80 text-xs">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-1.5 border-b border-cyan-500/30 mb-2">
+            <div className="flex items-center gap-1.5">
+              <Target className="w-4 h-4 text-cyan-400 animate-spin" style={{ animationDuration: '6s' }} />
+              <span className="font-tactical font-bold text-white tracking-wider text-xs">
+                GOD'S EYE // TARGET ACQUIRED
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                if (onSelectFlight) onSelectFlight(null);
+                if (onSelectVessel) onSelectVessel(null);
+                setCameraTrackLock(false);
+              }}
+              className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Target Summary */}
+          {selectedFlight && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-tactical font-black text-cyan-300">{selectedFlight.callsign}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-500/40 font-bold">
+                  {selectedFlight.originCountry || 'ADS-B'}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-300 font-tactical">
+                {selectedFlight.aircraftType || 'Airborne Transponder'}
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 bg-black/60 p-2 rounded border border-slate-800 text-[10px]">
+                <div>ALT: <span className="text-white font-bold">{selectedFlight.altitudeFeet?.toLocaleString() ?? 'Ground'} ft</span></div>
+                <div>SPD: <span className="text-white font-bold">{selectedFlight.velocityKmh ?? 'N/A'} km/h</span></div>
+                <div>HDG: <span className="text-white font-bold">{selectedFlight.trackHeading ?? 0}°</span></div>
+                <div>SQUAWK: <span className="text-slate-400">{selectedFlight.squawk || 'AUTO'}</span></div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-cyan-300 px-1">
+                <span>RANGE: <span className="text-white font-bold">{selectedFlight.distanceKmToListowel} km</span> ({Math.round(selectedFlight.distanceKmToListowel * 0.54)} NM)</span>
+                <span>BRG: <span className="text-white font-bold">{Math.round((selectedFlight.trackHeading ?? 0))}°</span></span>
+              </div>
+            </div>
+          )}
+
+          {selectedVessel && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-tactical font-black text-cyan-300">{selectedVessel.name}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-950/80 text-teal-300 border border-teal-500/40 font-bold">
+                  {selectedVessel.flag || 'AIS'}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-300 font-tactical">
+                {selectedVessel.vesselType}
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 bg-black/60 p-2 rounded border border-slate-800 text-[10px]">
+                <div>SPD: <span className="text-white font-bold">{selectedVessel.speedKnots} kts</span></div>
+                <div>HDG: <span className="text-white font-bold">{selectedVessel.headingDeg}°</span></div>
+                <div>DEST: <span className="text-white font-bold truncate">{selectedVessel.destination || 'LAKE HURON'}</span></div>
+                <div>MMSI: <span className="text-slate-400">{selectedVessel.mmsi}</span></div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-teal-300 px-1">
+                <span>RANGE: <span className="text-white font-bold">{selectedVessel.distanceKmToListowel} km</span> ({Math.round(selectedVessel.distanceKmToListowel * 0.54)} NM)</span>
+                <span>BRG: <span className="text-white font-bold">{selectedVessel.bearingFromListowelDeg}°</span></span>
+              </div>
+            </div>
+          )}
+
+          {/* Action Row */}
+          <div className="pt-2 mt-2 border-t border-slate-800 flex items-center justify-between">
+            <button
+              onClick={() => setCameraTrackLock(!cameraTrackLock)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-tactical font-bold cursor-pointer transition-colors ${
+                cameraTrackLock
+                  ? 'bg-cyan-500 text-black shadow-[0_0_12px_#00f2fe]'
+                  : 'bg-black/60 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-950/40'
+              }`}
+            >
+              {cameraTrackLock ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+              {cameraTrackLock ? 'TRACK LOCK: ENGAGED' : 'CAMERA TRACK LOCK'}
+            </button>
+            <span className="text-[9px] text-slate-500 font-mono">GOD'S EYE GEOINT</span>
+          </div>
         </div>
       )}
 

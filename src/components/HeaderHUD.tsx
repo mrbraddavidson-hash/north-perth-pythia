@@ -12,8 +12,9 @@ import {
   Key,
   Tv,
   AlertTriangle,
+  Eye,
 } from 'lucide-react';
-import { WeatherTelemetry } from '../services/types';
+import { WeatherTelemetry, OpticMode } from '../services/types';
 
 interface HeaderHUDProps {
   weather: WeatherTelemetry | null;
@@ -24,6 +25,8 @@ interface HeaderHUDProps {
   hasApiKey: boolean;
   onOpenKeyModal: () => void;
   criticalAlert?: string | null;
+  opticMode?: OpticMode;
+  onChangeOpticMode?: (mode: OpticMode) => void;
 }
 
 export const HeaderHUD: React.FC<HeaderHUDProps> = ({
@@ -35,6 +38,8 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   hasApiKey,
   onOpenKeyModal,
   criticalAlert,
+  opticMode = 'normal',
+  onChangeOpticMode,
 }) => {
   const [timeUtc, setTimeUtc] = useState<string>('');
   const [timeLocal, setTimeLocal] = useState<string>('');
@@ -159,6 +164,60 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
               <span className="flex items-center gap-0.5"><Wind className="w-3 h-3 text-slate-500" />{weather.windSpeedKmh}km/h</span>
               <span className="flex items-center gap-0.5"><Gauge className="w-3 h-3 text-slate-500" />{weather.barometricPressureHpa}hPa</span>
             </div>
+          </div>
+        )}
+
+        {/* God's Eye Sensor Shader Optics (bilawalsidhu/gods-eye-view) */}
+        {onChangeOpticMode && (
+          <div className="hidden sm:flex items-center bg-black/70 rounded border border-cyan-500/40 p-0.5 text-[10px] font-mono shadow-[0_0_12px_rgba(0,242,254,0.1)]">
+            <span className="text-[9px] text-slate-400 px-1.5 uppercase tracking-wider flex items-center gap-1 font-bold">
+              <Eye className="w-3 h-3 text-cyan-400" />
+              OPTIC:
+            </span>
+            <button
+              onClick={() => onChangeOpticMode('normal')}
+              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                opticMode === 'normal'
+                  ? 'bg-cyan-500 text-black shadow-[0_0_8px_#00f2fe]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Standard High-Clarity Optical"
+            >
+              STD
+            </button>
+            <button
+              onClick={() => onChangeOpticMode('flir')}
+              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                opticMode === 'flir'
+                  ? 'bg-rose-500 text-black shadow-[0_0_8px_#f43f5e]'
+                  : 'text-slate-400 hover:text-rose-300'
+              }`}
+              title="FLIR Thermal (White Hot Infrared Simulation)"
+            >
+              FLIR
+            </button>
+            <button
+              onClick={() => onChangeOpticMode('nvg')}
+              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                opticMode === 'nvg'
+                  ? 'bg-emerald-400 text-black shadow-[0_0_8px_#34d399]'
+                  : 'text-slate-400 hover:text-emerald-300'
+              }`}
+              title="Night Vision Goggles (Green Phosphor Matrix)"
+            >
+              NVG
+            </button>
+            <button
+              onClick={() => onChangeOpticMode('crt')}
+              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                opticMode === 'crt'
+                  ? 'bg-cyan-400 text-black shadow-[0_0_8px_#22d3ee]'
+                  : 'text-slate-400 hover:text-cyan-300'
+              }`}
+              title="CRT Surveillance Monitor (Raster Scanline Recon)"
+            >
+              CRT
+            </button>
           </div>
         )}
 

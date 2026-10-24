@@ -34,8 +34,10 @@ import {
   getWeatherAlerts,
 } from '../services/api';
 import { SeismicEvent, NaturalHazardEvent } from '../services/hazards';
+import { MaritimeVessel } from '../services/maritime';
 import { LiveIncidentsWidget } from './LiveIncidentsWidget';
 import { ScannerPlayerWidget } from './ScannerPlayerWidget';
+import { Ship, Anchor, Compass } from 'lucide-react';
 
 interface RightIntelPanelProps {
   weather: WeatherTelemetry | null;
@@ -51,6 +53,9 @@ interface RightIntelPanelProps {
   onSelectFlight: (flight: FlightData | null) => void;
   onSelectIncident?: (incident: LiveIncidentEvent) => void;
   onOpenAgriModal: () => void;
+  vessels?: MaritimeVessel[];
+  selectedVessel?: MaritimeVessel | null;
+  onSelectVessel?: (vessel: MaritimeVessel | null) => void;
 }
 
 export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
@@ -67,6 +72,9 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   onSelectFlight,
   onSelectIncident,
   onOpenAgriModal,
+  vessels = [],
+  selectedVessel = null,
+  onSelectVessel,
 }) => {
   const [activeTab, setActiveTab] = useState<'oracle' | 'airspace' | 'logs'>('oracle');
 
@@ -348,6 +356,54 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                   </div>
                 );
               })
+            )}
+
+            {/* God's Eye Maritime AIS Section (Lake Huron & Goderich Salt Port) */}
+            {vessels.length > 0 && (
+              <div className="pt-3 border-t border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span className="flex items-center gap-1.5 font-tactical font-bold text-teal-400">
+                    <Ship className="w-3.5 h-3.5 text-teal-400" />
+                    LAKE HURON // GODERICH MARITIME AIS
+                  </span>
+                  <span className="text-[10px] font-mono text-teal-300">{vessels.length} SHIPS</span>
+                </div>
+
+                {vessels.slice(0, 8).map((vessel) => {
+                  const isSelected = selectedVessel?.mmsi === vessel.mmsi;
+                  return (
+                    <div
+                      key={vessel.mmsi}
+                      onClick={() => {
+                        if (onSelectVessel) onSelectVessel(isSelected ? null : vessel);
+                      }}
+                      className={`p-2 rounded border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-teal-950/80 border-teal-400 text-teal-100 shadow-[0_0_12px_rgba(20,184,166,0.3)]'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-bold text-xs">
+                        <span className="flex items-center gap-1.5 text-teal-300 truncate max-w-[170px]">
+                          <Anchor className="w-3 h-3 text-teal-400 flex-shrink-0" />
+                          {vessel.name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono font-normal">
+                          {vessel.distanceKmToListowel} km
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                        {vessel.vesselType} • {vessel.destination || 'LAKE HURON'}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1 pt-1 border-t border-slate-800/60">
+                        <span>SPD: <span className="text-white font-bold">{vessel.speedKnots} kts</span></span>
+                        <span>HDG: <span className="text-white font-bold">{vessel.headingDeg}°</span></span>
+                        <span>FLAG: <span className="text-slate-300">{vessel.flag || 'AIS'}</span></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}

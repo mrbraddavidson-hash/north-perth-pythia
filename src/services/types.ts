@@ -130,7 +130,10 @@ export interface ActiveLayers {
   seismic?: boolean;
   hazards?: boolean;
   drought?: boolean;
+  maritime?: boolean;
 }
+
+export type OpticMode = 'normal' | 'flir' | 'nvg' | 'crt';
 
 export interface MvcaWatershedBulletin {
   status: 'NORMAL' | 'CONDITIONS_STATEMENT' | 'FLOOD_WATCH' | 'FLOOD_WARNING';
