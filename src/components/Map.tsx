@@ -13,7 +13,28 @@ import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS, TownMarker } from '../services/a
 import { LISTOWEL_HELIPAD_COORDS, SquallTrajectory } from '../services/squall';
 import { IssTelemetry } from '../services/space';
 import { SeismicEvent } from '../services/hazards';
-import { MapPin, Navigation2, Mountain, Layers, Eye, Plus, Orbit, Wind, Crosshair } from 'lucide-react';
+import {
+  fetchLiveRadarData,
+  getRadarTileUrl,
+  RadarData,
+  RadarFrame,
+} from '../services/radar';
+import {
+  MapPin,
+  Navigation2,
+  Mountain,
+  Layers,
+  Eye,
+  Plus,
+  Orbit,
+  Wind,
+  Crosshair,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  CloudRain,
+} from 'lucide-react';
 
 interface MapProps {
   layers: ActiveLayers;
@@ -62,8 +83,14 @@ export const MapView: React.FC<MapProps> = ({
   const satLabelsRef = useRef<L.TileLayer | null>(null);
   const satRoadsRef = useRef<L.TileLayer | null>(null);
   const topoBaseRef = useRef<L.TileLayer | null>(null);
-  const radarLayerRef = useRef<L.TileLayer.WMS | null>(null);
+  const radarLayerRef = useRef<L.TileLayer | null>(null);
   const droughtLayerRef = useRef<L.TileLayer.WMS | null>(null);
+
+  // Live Doppler Weather Radar State (Exeter Composite Mesh)
+  const [radarData, setRadarData] = useState<RadarData | null>(null);
+  const [radarFrameIndex, setRadarFrameIndex] = useState<number>(-1);
+  const [isPlayingRadar, setIsPlayingRadar] = useState<boolean>(false);
+  const [radarColorScheme, setRadarColorScheme] = useState<number>(2); // 2: Universal Blue, 8: NEXRAD, 4: Rainbow
 
   // Layer groups
   const townsGroupRef = useRef<L.LayerGroup | null>(null);
@@ -160,17 +187,16 @@ export const MapView: React.FC<MapProps> = ({
     incidentsGroupRef.current = L.layerGroup().addTo(map);
     seismicGroupRef.current = L.layerGroup().addTo(map);
 
-    // Environment Canada GeoMet WMS Doppler Precipitation Radar
-    const radarWms = L.tileLayer.wms('https://geo.weather.gc.ca/geomet', {
-      layers: 'RADAR_1KM_RRAI',
-      format: 'image/png',
-      transparent: true,
+    // Live High-Res Doppler Precipitation Radar (RainViewer CDN / Exeter Composite Mesh)
+    const initialRadarUrl = 'https://tilecache.rainviewer.com/v2/radar/now/256/{z}/{x}/{y}/2/1_1.png';
+    const radarTile = L.tileLayer(initialRadarUrl, {
+      maxZoom: 18,
       opacity: radarOpacity,
       zIndex: 20,
     });
-    radarLayerRef.current = radarWms;
+    radarLayerRef.current = radarTile;
     if (layers.radar) {
-      radarWms.addTo(map);
+      radarTile.addTo(map);
     }
 
     // Agriculture and Agri-Food Canada (AAFC) Drought Monitor WMS
@@ -272,6 +298,42 @@ export const MapView: React.FC<MapProps> = ({
       }
     }
   }, [layers.radar, radarOpacity]);
+
+  // Fetch live radar metadata on mount & 3-minute poll
+  useEffect(() => {
+    let mounted = true;
+    const loadRadar = async () => {
+      const data = await fetchLiveRadarData();
+      if (!mounted || !data || data.frames.length === 0) return;
+      setRadarData(data);
+      setRadarFrameIndex(data.frames.length - 1);
+    };
+    loadRadar();
+    const interval = setInterval(loadRadar, 180000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Update radar tile URL when frame index or color scheme changes
+  useEffect(() => {
+    if (!radarLayerRef.current || !radarData || radarFrameIndex < 0) return;
+    const frame = radarData.frames[radarFrameIndex];
+    if (frame) {
+      const url = getRadarTileUrl(radarData.host, frame.path, radarColorScheme);
+      radarLayerRef.current.setUrl(url);
+    }
+  }, [radarFrameIndex, radarColorScheme, radarData]);
+
+  // Handle radar playback loop
+  useEffect(() => {
+    if (!isPlayingRadar || !radarData || radarData.frames.length <= 1) return;
+    const interval = setInterval(() => {
+      setRadarFrameIndex((prev) => (prev + 1) % radarData.frames.length);
+    }, 700);
+    return () => clearInterval(interval);
+  }, [isPlayingRadar, radarData]);
 
   // Update AAFC Drought Monitor Layer Visibility
   useEffect(() => {
@@ -882,6 +944,118 @@ export const MapView: React.FC<MapProps> = ({
           >
             AIRSPACE
           </button>
+        </div>
+      )}
+
+      {/* Live Weather Radar Player HUD (Visible when Radar Layer is Active) */}
+      {layers.radar && radarData && radarData.frames.length > 0 && (
+        <div className="absolute bottom-16 sm:bottom-20 left-3 right-3 sm:right-auto sm:left-5 z-20 bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2.5 font-mono shadow-[0_0_25px_rgba(0,242,254,0.15)] backdrop-blur-md max-w-sm sm:max-w-md">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-[11px] font-tactical font-bold text-white tracking-wider">
+                LIVE DOPPLER // EXETER COMPOSITE
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30">
+              {radarFrameIndex >= 0 && radarData.frames[radarFrameIndex]
+                ? radarData.frames[radarFrameIndex].formattedTime
+                : 'LIVE'}
+            </span>
+          </div>
+
+          {/* Controls Bar */}
+          <div className="flex items-center gap-2 mb-2">
+            {/* Play / Pause Button */}
+            <button
+              onClick={() => setIsPlayingRadar(!isPlayingRadar)}
+              className="flex items-center justify-center w-7 h-7 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition-all shadow-[0_0_10px_#00f2fe] cursor-pointer flex-shrink-0"
+              title={isPlayingRadar ? 'Pause' : 'Play Loop'}
+            >
+              {isPlayingRadar ? (
+                <Pause className="w-3.5 h-3.5 fill-current" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+              )}
+            </button>
+
+            {/* Step Back */}
+            <button
+              onClick={() => {
+                setIsPlayingRadar(false);
+                setRadarFrameIndex((prev) => (prev > 0 ? prev - 1 : radarData.frames.length - 1));
+              }}
+              className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 cursor-pointer"
+              title="Previous Frame"
+            >
+              <SkipBack className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Frame Scrubber */}
+            <input
+              type="range"
+              min={0}
+              max={radarData.frames.length - 1}
+              value={radarFrameIndex >= 0 ? radarFrameIndex : radarData.frames.length - 1}
+              onChange={(e) => {
+                setIsPlayingRadar(false);
+                setRadarFrameIndex(parseInt(e.target.value));
+              }}
+              className="flex-1 accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+            />
+
+            {/* Step Forward */}
+            <button
+              onClick={() => {
+                setIsPlayingRadar(false);
+                setRadarFrameIndex((prev) => (prev + 1) % radarData.frames.length);
+              }}
+              className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 cursor-pointer"
+              title="Next Frame"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Color Scheme & Status Footer */}
+          <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1 border-t border-slate-800/60">
+            <div className="flex items-center gap-1.5">
+              <span>PALETTE:</span>
+              <button
+                onClick={() => setRadarColorScheme(2)}
+                className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                  radarColorScheme === 2
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                BLUE
+              </button>
+              <button
+                onClick={() => setRadarColorScheme(8)}
+                className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                  radarColorScheme === 8
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                NEXRAD
+              </button>
+              <button
+                onClick={() => setRadarColorScheme(4)}
+                className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                  radarColorScheme === 4
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                RAINBOW
+              </button>
+            </div>
+            <span className="text-slate-500">{radarData.frames.length} FRAMES // 10M RES</span>
+          </div>
         </div>
       )}
 

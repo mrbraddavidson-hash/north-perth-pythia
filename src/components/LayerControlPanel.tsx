@@ -53,11 +53,11 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
     },
     {
       key: 'radar',
-      label: 'Exeter Doppler Radar',
-      sublabel: 'Environment Canada GeoMet WMS',
+      label: 'Live Doppler Radar',
+      sublabel: 'Exeter WSO High-Res Composite',
       icon: <CloudRain className="w-4 h-4" />,
       color: 'text-cyan-400',
-      badge: 'LIVE WMS',
+      badge: 'LIVE DOPPLER',
     },
     {
       key: 'squall',

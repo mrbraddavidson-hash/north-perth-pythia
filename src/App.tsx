@@ -54,10 +54,10 @@ export function App() {
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-  // Layer visibility state (default radar off on mobile to prevent 20 heavy WMS tiles blocking mobile data)
+  // Layer visibility state
   const [layers, setLayers] = useState<ActiveLayers>({
     towns: true,
-    radar: !isMobile,
+    radar: true,
     squall: true,
     flights: true,
     helipad: true,
