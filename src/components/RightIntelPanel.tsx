@@ -17,6 +17,8 @@ import {
   Construction,
   Droplets,
   Building2,
+  Activity,
+  Flame,
 } from 'lucide-react';
 import {
   FlightData,
@@ -31,6 +33,7 @@ import {
   getMvcaWatershedBulletin,
   getWeatherAlerts,
 } from '../services/api';
+import { SeismicEvent, NaturalHazardEvent } from '../services/hazards';
 import { LiveIncidentsWidget } from './LiveIncidentsWidget';
 import { ScannerPlayerWidget } from './ScannerPlayerWidget';
 
@@ -42,6 +45,8 @@ interface RightIntelPanelProps {
   dispatches: EmergencyDispatch[];
   buses: SchoolBusAlert[];
   incidents: LiveIncidentEvent[];
+  earthquakes?: SeismicEvent[];
+  nasaEvents?: NaturalHazardEvent[];
   selectedFlight: FlightData | null;
   onSelectFlight: (flight: FlightData | null) => void;
   onSelectIncident?: (incident: LiveIncidentEvent) => void;
@@ -56,6 +61,8 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   dispatches,
   buses,
   incidents,
+  earthquakes = [],
+  nasaEvents = [],
   selectedFlight,
   onSelectFlight,
   onSelectIncident,
@@ -82,7 +89,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          AI SITREP
+          PYTHIA SITREP
         </button>
         <button
           onClick={() => setActiveTab('airspace')}
@@ -104,7 +111,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           }`}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          LOGS & SCANNER
+          HAZARDS & SCANNER
         </button>
       </div>
 
@@ -209,7 +216,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
             >
               <div className="flex items-center gap-2">
                 <Sprout className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs">AGRI, DELTA-T & GRAIN BIDS</span>
+                <span className="text-xs">AGRONOMY // LIVE DELTA-T SPRAY WINDOW</span>
               </div>
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -345,7 +352,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 3: LIVE SCANNER, 511 INCIDENTS & MUNICIPAL LOGS */}
+        {/* TAB 3: LIVE SCANNER, 511 INCIDENTS & HAZARDS */}
         {activeTab === 'logs' && (
           <div className="space-y-3">
             {/* Native In-Page Live Tactical Scanner Audio Player */}
@@ -357,14 +364,73 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               onSelectIncident={onSelectIncident}
             />
 
+            {/* Live USGS & Earthquakes Canada Regional Seismic Activity */}
+            {earthquakes && earthquakes.length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between text-[10px] font-tactical tracking-wider text-amber-400">
+                  <span className="flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-amber-400" />
+                    REGIONAL SEISMIC MONITOR (USGS)
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono">
+                    LIVE FEED
+                  </span>
+                </div>
+                {earthquakes.slice(0, 5).map((q) => (
+                  <div key={q.id} className="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-amber-300 flex items-center gap-1">
+                        <span className="px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 font-bold text-[10px] border border-amber-500/40 font-mono">
+                          M {q.magnitude}
+                        </span>
+                        <span className="truncate max-w-[190px]">{q.place}</span>
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">{q.time}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span>Depth: {q.depthKm} km</span>
+                      <span className="text-cyan-300 font-semibold">{q.distanceKmToListowel} km from Listowel</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Live NASA EONET Active Natural Hazards */}
+            {nasaEvents && nasaEvents.length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between text-[10px] font-tactical tracking-wider text-rose-400">
+                  <span className="flex items-center gap-1.5">
+                    <Flame className="w-3.5 h-3.5 text-rose-400" />
+                    NASA EONET ACTIVE DISASTERS
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono">
+                    LIVE SATELLITE
+                  </span>
+                </div>
+                {nasaEvents.slice(0, 4).map((h) => (
+                  <div key={h.id} className="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-rose-300 truncate max-w-[210px]">{h.title}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{h.date}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span className="text-slate-300">{h.category}</span>
+                      <span className="text-cyan-300 font-semibold">{h.distanceKmToListowel} km out</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Municipal & Utility Feeds Integrity Notice */}
-            <div className="p-3 rounded border border-slate-800 bg-slate-900/40 text-slate-400 text-[10px] space-y-1.5 mt-2">
+            <div className="p-3 rounded border border-slate-800 bg-slate-900/40 text-slate-400 text-[10px] space-y-1 mt-2">
               <div className="font-semibold text-slate-300 flex items-center gap-1.5">
                 <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
-                MUNICIPAL DISPATCH & UTILITY TELEMETRY
+                LOCAL CAD & UTILITY DATA INTEGRITY
               </div>
-              <p className="text-slate-400 leading-relaxed">
-                Perth County OPP, North Perth Fire, and Hydro One operate on private dispatch networks without public unauthenticated telemetry streams. All simulated fallback cards have been purged to guarantee 100% real-time data integrity.
+              <p className="text-slate-400 leading-relaxed text-[10px]">
+                Perth County OPP, North Perth Fire, and Hydro One operate on private dispatch channels. Synthetic entries have been permanently removed to ensure 100% verified sensor truth.
               </p>
             </div>
           </div>

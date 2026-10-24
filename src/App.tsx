@@ -30,6 +30,12 @@ import {
 } from './services/api';
 import { fetchAuroraKp, fetchLiveIss, AuroraData, IssTelemetry } from './services/space';
 import { calculateSquallTrajectory, SquallTrajectory } from './services/squall';
+import {
+  fetchLiveEarthquakes,
+  fetchLiveNASAEvents,
+  SeismicEvent,
+  NaturalHazardEvent,
+} from './services/hazards';
 import { Layers, Activity, X, Sprout } from 'lucide-react';
 
 export function App() {
@@ -59,10 +65,12 @@ export function App() {
     cams: true,
     roads: true,
     weather: true,
-    hydro: true,
+    hydro: false,
     dispatches: true,
-    buses: true,
+    buses: false,
     satellites: true,
+    seismic: true,
+    hazards: true,
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
@@ -81,6 +89,8 @@ export function App() {
   const [iss, setIss] = useState<IssTelemetry | null>(null);
   const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
   const [incidents, setIncidents] = useState<LiveIncidentEvent[]>([]);
+  const [earthquakes, setEarthquakes] = useState<SeismicEvent[]>([]);
+  const [nasaEvents, setNasaEvents] = useState<NaturalHazardEvent[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Load all live feeds
@@ -96,6 +106,8 @@ export function App() {
         fetchAuroraKp(),
         fetchLiveIss(),
         fetchLive511Incidents(apiKey),
+        fetchLiveEarthquakes(),
+        fetchLiveNASAEvents(),
       ]);
 
       if (results[0].status === 'fulfilled') setFlights(results[0].value);
@@ -117,6 +129,8 @@ export function App() {
       if (results[5].status === 'fulfilled') setAurora(results[5].value);
       if (results[6].status === 'fulfilled') setIss(results[6].value);
       if (results[7].status === 'fulfilled') setIncidents(results[7].value);
+      if (results[8].status === 'fulfilled') setEarthquakes(results[8].value);
+      if (results[9].status === 'fulfilled') setNasaEvents(results[9].value);
 
 
     } catch (err) {
@@ -360,6 +374,7 @@ export function App() {
             squallTrajectory={squallTrajectory}
             iss={iss}
             incidents={incidents}
+            earthquakes={earthquakes}
             onApplyPreset={handleApplyPreset}
           />
 
@@ -410,6 +425,8 @@ export function App() {
             dispatches={dispatches}
             buses={buses}
             incidents={incidents}
+            earthquakes={earthquakes}
+            nasaEvents={nasaEvents}
             selectedFlight={selectedFlight}
             onSelectFlight={handleSelectFlight}
             onOpenAgriModal={() => setIsAgriModalOpen(true)}
@@ -476,6 +493,8 @@ export function App() {
                   dispatches={dispatches}
                   buses={buses}
                   incidents={incidents}
+                  earthquakes={earthquakes}
+                  nasaEvents={nasaEvents}
                   selectedFlight={selectedFlight}
                   onSelectFlight={handleSelectFlight}
                   onOpenAgriModal={() => {

@@ -12,6 +12,7 @@ import {
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS, TownMarker } from '../services/api';
 import { LISTOWEL_HELIPAD_COORDS, SquallTrajectory } from '../services/squall';
 import { IssTelemetry } from '../services/space';
+import { SeismicEvent } from '../services/hazards';
 import { MapPin, Navigation2, Mountain, Layers, Eye, Plus, Orbit, Wind, Crosshair } from 'lucide-react';
 
 interface MapProps {
@@ -27,6 +28,7 @@ interface MapProps {
   squallTrajectory?: SquallTrajectory | null;
   iss?: IssTelemetry | null;
   incidents?: LiveIncidentEvent[];
+  earthquakes?: SeismicEvent[];
   onApplyPreset?: (preset: 'all' | 'weather' | 'corridors' | 'airspace') => void;
 }
 
@@ -45,6 +47,7 @@ export const MapView: React.FC<MapProps> = ({
   squallTrajectory,
   iss,
   incidents = [],
+  earthquakes = [],
   onApplyPreset,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -72,6 +75,7 @@ export const MapView: React.FC<MapProps> = ({
   const squallGroupRef = useRef<L.LayerGroup | null>(null);
   const issGroupRef = useRef<L.LayerGroup | null>(null);
   const incidentsGroupRef = useRef<L.LayerGroup | null>(null);
+  const seismicGroupRef = useRef<L.LayerGroup | null>(null);
 
   // Initialize Map
   useEffect(() => {
@@ -153,6 +157,7 @@ export const MapView: React.FC<MapProps> = ({
     squallGroupRef.current = L.layerGroup().addTo(map);
     issGroupRef.current = L.layerGroup().addTo(map);
     incidentsGroupRef.current = L.layerGroup().addTo(map);
+    seismicGroupRef.current = L.layerGroup().addTo(map);
 
     // Environment Canada GeoMet WMS Doppler Precipitation Radar
     const radarWms = L.tileLayer.wms('https://geo.weather.gc.ca/geomet', {
@@ -757,6 +762,60 @@ export const MapView: React.FC<MapProps> = ({
       marker.addTo(incidentsGroupRef.current!);
     });
   }, [incidents, layers.dispatches, layers.roads]);
+
+  // Render USGS Earthquakes
+  useEffect(() => {
+    if (!seismicGroupRef.current || !mapInstanceRef.current) return;
+    seismicGroupRef.current.clearLayers();
+
+    if (!layers.seismic || !earthquakes || earthquakes.length === 0) return;
+
+    earthquakes.forEach((eq) => {
+      const isSignificant = eq.magnitude >= 2.0;
+
+      const icon = L.divIcon({
+        className: 'seismic-marker-icon',
+        html: `
+          <div class="relative flex items-center justify-center cursor-pointer pointer-events-auto">
+            <div class="w-7 h-7 rounded-full ${
+              isSignificant
+                ? 'bg-rose-500/30 border-2 border-rose-400 shadow-[0_0_15px_#f43f5e]'
+                : 'bg-amber-500/25 border-2 border-amber-400 shadow-[0_0_10px_#f59e0b]'
+            } flex items-center justify-center">
+              <span class="text-[9px] font-bold font-mono ${isSignificant ? 'text-rose-200' : 'text-amber-200'}">
+                ${eq.magnitude}
+              </span>
+            </div>
+            <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-950/90 text-[8px] font-mono px-1 py-0.2 rounded border border-amber-500/40 text-amber-300">
+              ${eq.place.split(',')[0]}
+            </div>
+          </div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+
+      const marker = L.marker([eq.latitude, eq.longitude], { icon, zIndexOffset: 75 })
+        .addTo(seismicGroupRef.current!);
+
+      marker.bindPopup(`
+        <div class="p-2 space-y-1 text-xs font-mono">
+          <div class="flex items-center justify-between border-b border-amber-500/40 pb-1">
+            <span class="font-bold text-amber-400 text-sm">M ${eq.magnitude} EARTHQUAKE</span>
+            <span class="text-[9px] text-slate-400 font-bold">USGS LIVE</span>
+          </div>
+          <div class="text-white font-semibold text-xs pt-0.5">${eq.place}</div>
+          <div class="grid grid-cols-2 gap-x-2 gap-y-1 pt-1 text-slate-300 text-[11px]">
+            <div>DEPTH: <span class="text-white">${eq.depthKm} km</span></div>
+            <div>TIME: <span class="text-slate-400">${eq.time}</span></div>
+            <div class="col-span-2 pt-1 border-t border-slate-800 text-cyan-300">
+              DISTANCE TO LISTOWEL: <span class="font-bold text-white">${eq.distanceKmToListowel} km</span>
+            </div>
+          </div>
+        </div>
+      `);
+    });
+  }, [earthquakes, layers.seismic]);
 
   return (
     <div className="relative w-full h-full">

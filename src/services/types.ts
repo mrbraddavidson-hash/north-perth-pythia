@@ -127,6 +127,8 @@ export interface ActiveLayers {
   dispatches: boolean;
   buses: boolean;
   satellites: boolean;
+  seismic?: boolean;
+  hazards?: boolean;
 }
 
 export interface MvcaWatershedBulletin {

@@ -15,6 +15,7 @@ import {
   Check,
   Wind,
   Crosshair,
+  Activity,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -104,6 +105,14 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
       icon: <ShieldAlert className="w-4 h-4" />,
       color: 'text-rose-400',
       badge: 'LIVE 511',
+    },
+    {
+      key: 'seismic',
+      label: 'Regional Seismic Monitor',
+      sublabel: 'USGS & Earthquakes Canada',
+      icon: <Activity className="w-4 h-4" />,
+      color: 'text-amber-400',
+      badge: 'USGS LIVE',
     },
     {
       key: 'satellites',
