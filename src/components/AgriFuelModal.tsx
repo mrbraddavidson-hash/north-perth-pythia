@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sprout,
-  Fuel,
   Flame,
   Wind,
   Droplets,
@@ -11,15 +10,18 @@ import {
   X,
   AlertTriangle,
   CheckCircle2,
+  Layers,
+  Thermometer,
+  Activity,
 } from 'lucide-react';
 import {
   calculateSprayWindow,
-  getLocalGrainBids,
-  getListowelFuelPrices,
+  fetchLiveSoilTelemetry,
+  fetchLiveCommodities,
   getBurnPermitStatus,
-  GrainBid,
-  FuelPrice,
   SprayCondition,
+  SoilTelemetry,
+  CommodityFuture,
 } from '../services/agri';
 import { WeatherTelemetry } from '../services/types';
 
@@ -30,7 +32,28 @@ interface AgriFuelModalProps {
 }
 
 export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({ isOpen, onClose, weather }) => {
-  const [activeTab, setActiveTab] = useState<'spray' | 'grain' | 'fuel'>('spray');
+  const [activeTab, setActiveTab] = useState<'spray' | 'soil' | 'cbot'>('spray');
+  const [soil, setSoil] = useState<SoilTelemetry | null>(null);
+  const [commodities, setCommodities] = useState<CommodityFuture[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let mounted = true;
+    setLoading(true);
+
+    Promise.allSettled([fetchLiveSoilTelemetry(), fetchLiveCommodities()]).then(([soilRes, commRes]) => {
+      if (!mounted) return;
+      if (soilRes.status === 'fulfilled' && soilRes.value) setSoil(soilRes.value);
+      if (commRes.status === 'fulfilled' && commRes.value) setCommodities(commRes.value);
+      setLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -39,8 +62,6 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({ isOpen, onClose, w
   const wind = weather?.windSpeedKmh ?? 14;
 
   const sprayInfo: SprayCondition = calculateSprayWindow(temp, rh, wind);
-  const grainBids: GrainBid[] = getLocalGrainBids();
-  const fuelPrices: FuelPrice[] = getListowelFuelPrices();
   const burnStatus = getBurnPermitStatus();
 
   return (
@@ -61,10 +82,10 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({ isOpen, onClose, w
           </div>
           <div>
             <h2 className="font-tactical text-base font-bold text-white tracking-wider flex items-center gap-2">
-              NORTH PERTH // AGRONOMY & DELTA-T INTEL
+              NORTH PERTH // LIVE AGRICULTURAL TELEMETRY
             </h2>
             <p className="text-[11px] text-slate-400">
-              Live Stull Delta-T Spray Windows • Evaporation Risk • ECCC Atmosphere
+              Delta-T Spraying • Open-Meteo Soil Moisture • CBOT Grain & Livestock
             </p>
           </div>
         </div>
@@ -80,29 +101,29 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({ isOpen, onClose, w
             }`}
           >
             <Droplets className="w-3.5 h-3.5" />
-            DELTA-T SPRAY WINDOW
+            DELTA-T SPRAY
           </button>
           <button
-            onClick={() => setActiveTab('grain')}
+            onClick={() => setActiveTab('soil')}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-              activeTab === 'grain'
+              activeTab === 'soil'
+                ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            SOIL & MOISTURE
+          </button>
+          <button
+            onClick={() => setActiveTab('cbot')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+              activeTab === 'cbot'
                 ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <DollarSign className="w-3.5 h-3.5" />
-            GRAIN BIDS (LISTOWEL)
-          </button>
-          <button
-            onClick={() => setActiveTab('fuel')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-              activeTab === 'fuel'
-                ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Fuel className="w-3.5 h-3.5" />
-            LOCAL FUEL
+            CBOT / CME MARKETS
           </button>
         </div>
 
@@ -186,29 +207,130 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({ isOpen, onClose, w
             </div>
           )}
 
-          {/* TAB 2: GRAIN COMMODITY BIDS */}
-          {activeTab === 'grain' && (
-            <div className="p-4 rounded border border-slate-800 bg-slate-900/50 text-slate-400 text-xs space-y-2">
-              <div className="font-semibold text-slate-200 flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-emerald-400" />
-                LOCAL ELEVATOR CASH BIDS
+          {/* TAB 2: LIVE SOIL & AGROMETEOROLOGY */}
+          {activeTab === 'soil' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1">
+                <span>OPEN-METEO SOIL PHYSICS (NORTH PERTH)</span>
+                <span className="text-emerald-400 font-bold flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  LIVE TELEMETRY
+                </span>
               </div>
-              <p className="text-slate-400 leading-relaxed text-[11px]">
-                Neither Parrish & Heimbecker (Listowel) nor Hensall Co-op publish an unauthenticated public JSON API for real-time local cash elevator bids. Fabricated pricing has been removed to preserve strict data integrity.
-              </p>
+
+              {/* Soil Temperature by Depth */}
+              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
+                  <Thermometer className="w-3.5 h-3.5 text-emerald-400" />
+                  Soil Temperature Profile (°C)
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400">Surface (0 cm)</span>
+                    <div className="text-base font-bold text-white mt-0.5">{soil?.soilTemp0cm ?? '--'}°C</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400">Seedbed (6 cm)</span>
+                    <div className="text-base font-bold text-cyan-300 mt-0.5">{soil?.soilTemp6cm ?? '--'}°C</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400">Root Zone (18 cm)</span>
+                    <div className="text-base font-bold text-slate-200 mt-0.5">{soil?.soilTemp18cm ?? '--'}°C</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Volumetric Soil Moisture by Depth */}
+              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5">
+                  <Droplets className="w-3.5 h-3.5 text-cyan-400" />
+                  Volumetric Soil Water Content (%)
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400">Topsoil (0-1 cm)</span>
+                    <div className="text-base font-bold text-white mt-0.5">{soil?.soilMoisture0to1cm ?? '--'}%</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400">Shallow (1-3 cm)</span>
+                    <div className="text-base font-bold text-cyan-300 mt-0.5">{soil?.soilMoisture1to3cm ?? '--'}%</div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-950/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-400">Subsurface (3-9 cm)</span>
+                    <div className="text-base font-bold text-emerald-300 mt-0.5">{soil?.soilMoisture3to9cm ?? '--'}%</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vapour Pressure Deficit & Evapotranspiration */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800">
+                  <span className="text-[10px] text-slate-400">Vapour Pressure Deficit (VPD)</span>
+                  <div className="text-sm font-bold text-amber-300 mt-0.5">
+                    {soil?.vpdKpa ?? '--'} <span className="text-[10px] font-normal text-slate-400">kPa</span>
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-0.5">Atmospheric drying demand</div>
+                </div>
+                <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800">
+                  <span className="text-[10px] text-slate-400">Evapotranspiration (ET0)</span>
+                  <div className="text-sm font-bold text-cyan-300 mt-0.5">
+                    {soil?.et0Mm ?? '--'} <span className="text-[10px] font-normal text-slate-400">mm/hr</span>
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-0.5">FAO-56 reference crop rate</div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* TAB 3: LISTOWEL FUEL PRICES */}
-          {activeTab === 'fuel' && (
-            <div className="p-4 rounded border border-slate-800 bg-slate-900/50 text-slate-400 text-xs space-y-2">
-              <div className="font-semibold text-slate-200 flex items-center gap-2">
-                <Fuel className="w-4 h-4 text-amber-400" />
-                WALLACE AVE RETAIL FUEL
+          {/* TAB 3: LIVE CBOT / CME AGRICULTURAL FUTURES */}
+          {activeTab === 'cbot' && (
+            <div className="space-y-2">
+              <div className="text-[10px] text-slate-400 pb-1 flex items-center justify-between border-b border-slate-800">
+                <span>COMMODITY & ACTIVE CONTRACT</span>
+                <span>CBOT SETTLEMENT RATE</span>
               </div>
-              <p className="text-slate-400 leading-relaxed text-[11px]">
-                Local retail gas stations along Highway 86 and Wallace Ave do not publish open REST APIs for real-time pump prices. Simulated estimates have been removed to preserve strict data integrity.
-              </p>
+
+              {loading && commodities.length === 0 ? (
+                <div className="p-4 text-center text-slate-500 text-xs">
+                  Streaming live market data from Chicago Board of Trade...
+                </div>
+              ) : commodities.length === 0 ? (
+                <div className="p-4 text-center text-slate-500 text-xs">
+                  Market session inactive or data feed reconnecting.
+                </div>
+              ) : (
+                commodities.map((c) => (
+                  <div
+                    key={c.symbol}
+                    className="p-2.5 rounded bg-slate-900/70 border border-slate-800 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="font-bold text-slate-100 text-xs">{c.name}</div>
+                      <div className="text-[10px] text-slate-400">{c.contract}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-emerald-400 font-mono">
+                        ${c.price.toFixed(2)} <span className="text-white text-[10px]">{c.unit}</span>
+                      </div>
+                      <div
+                        className={`text-[10px] flex items-center justify-end gap-0.5 font-mono ${
+                          c.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {c.changePercent >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                        <span>
+                          {c.changePercent >= 0 ? '+' : ''}
+                          {c.changePercent.toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+
+              <div className="text-[9px] text-slate-500 pt-2 border-t border-slate-800/80">
+                • Ontario grain elevators (P&H Listowel, Hensall Co-op) peg daily cash purchase bids directly to CBOT futures plus regional basis.
+              </div>
             </div>
           )}
         </div>

@@ -10,6 +10,14 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      '/api/commodities': {
+        target: 'https://query1.finance.yahoo.com',
+        changeOrigin: true,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        },
+        rewrite: (path) => path.replace(/^\/api\/commodities/, ''),
+      },
       '/api/adsb': {
         target: 'https://opendata.adsb.fi',
         changeOrigin: true,
