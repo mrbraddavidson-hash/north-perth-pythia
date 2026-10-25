@@ -41,7 +41,13 @@ import {
   Lock,
   Unlock,
   X,
+  Shield,
 } from 'lucide-react';
+import { GodsEyeOverlay } from './GodsEyeOverlay';
+import {
+  MilitaryFlight,
+  CANADIAN_MILITARY_INSTALLATIONS,
+} from '../services/godseye';
 
 interface MapProps {
   layers: ActiveLayers;
@@ -63,6 +69,9 @@ interface MapProps {
   onChangeOpticMode?: (mode: OpticMode) => void;
   selectedVessel?: MaritimeVessel | null;
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
+  milFlights?: MilitaryFlight[];
+  isGodsEyeActive?: boolean;
+  onToggleGodsEye?: () => void;
 }
 
 type MapStyle = 'tactical' | 'streets' | 'satellite' | 'topo';
@@ -87,6 +96,9 @@ export const MapView: React.FC<MapProps> = ({
   onChangeOpticMode,
   selectedVessel = null,
   onSelectVessel,
+  milFlights = [],
+  isGodsEyeActive = false,
+  onToggleGodsEye,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -124,7 +136,10 @@ export const MapView: React.FC<MapProps> = ({
   const incidentsGroupRef = useRef<L.LayerGroup | null>(null);
   const seismicGroupRef = useRef<L.LayerGroup | null>(null);
   const vesselsGroupRef = useRef<L.LayerGroup | null>(null);
+  const militaryGroupRef = useRef<L.LayerGroup | null>(null);
   const [cameraTrackLock, setCameraTrackLock] = useState<boolean>(false);
+  const [currentCenter, setCurrentCenter] = useState<[number, number]>(NORTH_PERTH_COORDS);
+  const [currentZoom, setCurrentZoom] = useState<number>(11);
 
   // Initialize Map
   useEffect(() => {
@@ -208,6 +223,15 @@ export const MapView: React.FC<MapProps> = ({
     incidentsGroupRef.current = L.layerGroup().addTo(map);
     seismicGroupRef.current = L.layerGroup().addTo(map);
     vesselsGroupRef.current = L.layerGroup().addTo(map);
+    militaryGroupRef.current = L.layerGroup().addTo(map);
+
+    const updateMapCenterAndZoom = () => {
+      const c = map.getCenter();
+      setCurrentCenter([c.lat, c.lng]);
+      setCurrentZoom(map.getZoom());
+    };
+    map.on('move', updateMapCenterAndZoom);
+    map.on('zoom', updateMapCenterAndZoom);
 
     // 1. RainViewer High-Res Animated Doppler Loop (maxNativeZoom: 7 for crisp upscaling without errors)
     const initialRadarUrl = 'https://tilecache.rainviewer.com/v2/radar/now/256/{z}/{x}/{y}/2/1_1.png';
@@ -1061,9 +1085,144 @@ export const MapView: React.FC<MapProps> = ({
     });
   }, [earthquakes, layers.seismic]);
 
+  // Military & CAF Installations and Flights Layer (God's Eye Recon)
+  useEffect(() => {
+    if (!militaryGroupRef.current) return;
+    militaryGroupRef.current.clearLayers();
+
+    const isVisible = layers.military || isGodsEyeActive;
+    if (!isVisible) return;
+
+    // 1. Canadian Armed Forces Installations
+    CANADIAN_MILITARY_INSTALLATIONS.forEach((base) => {
+      const typeColor =
+        base.type === 'BASE'
+          ? 'bg-red-600 border-red-400 text-white'
+          : base.type === 'TRAINING_RANGE'
+          ? 'bg-amber-600 border-amber-400 text-white'
+          : base.type === 'AMMUNITION_DEPOT'
+          ? 'bg-rose-700 border-rose-300 text-white'
+          : 'bg-slate-800 border-cyan-400 text-cyan-300';
+
+      const icon = L.divIcon({
+        className: 'custom-military-base-marker',
+        html: `
+          <div class="relative group cursor-pointer">
+            <div class="w-6 h-6 rounded-md ${typeColor} flex items-center justify-center border shadow-[0_0_12px_rgba(239,68,68,0.5)]">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+            </div>
+            <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-950/90 text-[8px] font-mono px-1 py-0.2 rounded border border-red-500/50 text-red-300 font-bold shadow-lg">
+              ${base.name.split('(')[0].trim()}
+            </div>
+          </div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([base.latitude, base.longitude], { icon, zIndexOffset: 85 })
+        .addTo(militaryGroupRef.current!);
+
+      marker.bindPopup(`
+        <div class="p-2 space-y-1.5 text-xs font-mono">
+          <div class="flex items-center justify-between border-b border-red-500/40 pb-1">
+            <span class="font-bold text-red-400 text-xs">CAF INSTALLATION</span>
+            <span class="text-[9px] px-1 py-0.2 bg-red-950 text-red-200 border border-red-500/40 rounded">${base.type}</span>
+          </div>
+          <div class="text-white font-bold text-sm">${base.name}</div>
+          <div class="text-[11px] text-slate-300">${base.description}</div>
+          <div class="pt-1.5 border-t border-slate-800 grid grid-cols-2 gap-1 text-[10px]">
+            <div>COMMAND: <span class="text-cyan-300 font-semibold">${base.command}</span></div>
+            <div>DIST TO LISTOWEL: <span class="text-amber-300 font-bold">${base.distanceKmToListowel} km</span></div>
+          </div>
+        </div>
+      `);
+    });
+
+    // 2. Live Military Flights (api.adsb.lol/v2/mil)
+    milFlights.forEach((ac) => {
+      const heading = ac.headingDeg ?? 0;
+      const icon = L.divIcon({
+        className: 'custom-mil-flight-marker',
+        html: `
+          <div class="relative group cursor-pointer">
+            <div class="w-6 h-6 rounded-full bg-red-950/90 border border-red-400 flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.7)]" style="transform: rotate(${heading}deg);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" class="text-red-400"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.3c.4-.2.6-.6.5-1.1z"/></svg>
+            </div>
+            <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-950 text-[8px] font-mono px-1 py-0.2 rounded border border-red-500 text-red-200 font-bold">
+              ${ac.callsign}
+            </div>
+          </div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([ac.latitude, ac.longitude], { icon, zIndexOffset: 95 })
+        .addTo(militaryGroupRef.current!);
+
+      marker.on('click', () => {
+        // Map to FlightData format for God's Eye target tracking
+        onSelectFlight({
+          icao24: ac.hex,
+          callsign: ac.callsign,
+          originCountry: 'MILITARY / DND',
+          latitude: ac.latitude,
+          longitude: ac.longitude,
+          altitudeMeters: ac.altitudeFeet ? Math.round(ac.altitudeFeet * 0.3048) : null,
+          altitudeFeet: ac.altitudeFeet,
+          velocityKmh: ac.speedKnots ? Math.round(ac.speedKnots * 1.852) : null,
+          trackHeading: ac.headingDeg,
+          verticalRate: null,
+          onGround: false,
+          squawk: ac.squawk || null,
+          distanceKmToListowel: ac.distanceKmToListowel,
+          aircraftType: ac.aircraftType || 'Military Airframe',
+          registration: ac.registration,
+        });
+      });
+
+      marker.bindPopup(`
+        <div class="p-2 space-y-1.5 text-xs font-mono">
+          <div class="flex items-center justify-between border-b border-red-500/40 pb-1">
+            <span class="font-bold text-red-400 text-xs">${ac.callsign}</span>
+            <span class="text-[9px] px-1 py-0.2 bg-red-900 text-white rounded font-bold">MIL ADSB</span>
+          </div>
+          <div class="grid grid-cols-2 gap-1 text-[11px] text-slate-300">
+            <div>TYPE: <span class="text-white font-bold">${ac.aircraftType || 'N/A'}</span></div>
+            <div>REG: <span class="text-white font-bold">${ac.registration || ac.hex}</span></div>
+            <div>ALT: <span class="text-white font-bold">${ac.altitudeFeet ? ac.altitudeFeet.toLocaleString() + ' ft' : 'N/A'}</span></div>
+            <div>SPEED: <span class="text-white font-bold">${ac.speedKnots ? ac.speedKnots + ' kts' : 'N/A'}</span></div>
+            <div>HEADING: <span class="text-white font-bold">${ac.headingDeg ?? 0}°</span></div>
+            <div>SQUAWK: <span class="text-amber-300 font-bold">${ac.squawk || 'AUTO'}</span></div>
+          </div>
+          <div class="pt-1.5 border-t border-slate-800 text-cyan-300 text-[10px]">
+            DISTANCE TO LISTOWEL: <span class="text-white font-bold">${ac.distanceKmToListowel} km</span>
+          </div>
+        </div>
+      `);
+    });
+  }, [milFlights, layers.military, isGodsEyeActive]);
+
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+      {/* God's Eye Recon HUD Overlay (bilawalsidhu/gods-eye-view) */}
+      <GodsEyeOverlay
+        isActive={!!isGodsEyeActive}
+        onToggle={() => onToggleGodsEye && onToggleGodsEye()}
+        centerLat={currentCenter[0]}
+        centerLon={currentCenter[1]}
+        zoom={currentZoom}
+        milFlightCount={milFlights.length}
+        nearestBaseName="Stratford Garrison (31 CBG)"
+        nearestBaseDistanceKm={40}
+        targetName="NORTH PERTH / LISTOWEL CORE"
+        onLockListowel={() => {
+          mapInstanceRef.current?.flyTo(NORTH_PERTH_COORDS, 13, { duration: 1.5 });
+        }}
+      />
 
       {/* Top Floating Quick Preset Bar */}
       {onApplyPreset && (

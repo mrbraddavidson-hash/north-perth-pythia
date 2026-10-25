@@ -131,6 +131,8 @@ export interface ActiveLayers {
   hazards?: boolean;
   drought?: boolean;
   maritime?: boolean;
+  military?: boolean;
+  godseye?: boolean;
 }
 
 export type OpticMode = 'normal' | 'flir' | 'nvg' | 'crt';

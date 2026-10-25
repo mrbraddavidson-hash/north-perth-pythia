@@ -37,7 +37,8 @@ import { SeismicEvent, NaturalHazardEvent } from '../services/hazards';
 import { MaritimeVessel } from '../services/maritime';
 import { LiveIncidentsWidget } from './LiveIncidentsWidget';
 import { ScannerPlayerWidget } from './ScannerPlayerWidget';
-import { Ship, Anchor, Compass } from 'lucide-react';
+import { Ship, Anchor, Compass, Shield } from 'lucide-react';
+import { MilitaryFlight } from '../services/godseye';
 
 interface RightIntelPanelProps {
   weather: WeatherTelemetry | null;
@@ -56,6 +57,7 @@ interface RightIntelPanelProps {
   vessels?: MaritimeVessel[];
   selectedVessel?: MaritimeVessel | null;
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
+  milFlights?: MilitaryFlight[];
 }
 
 export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
@@ -75,6 +77,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   vessels = [],
   selectedVessel = null,
   onSelectVessel,
+  milFlights = [],
 }) => {
   const [activeTab, setActiveTab] = useState<'oracle' | 'airspace' | 'logs'>('oracle');
 
@@ -399,6 +402,76 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                         <span>SPD: <span className="text-white font-bold">{vessel.speedKnots} kts</span></span>
                         <span>HDG: <span className="text-white font-bold">{vessel.headingDeg}°</span></span>
                         <span>FLAG: <span className="text-slate-300">{vessel.flag || 'AIS'}</span></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* God's Eye Military Recon Flights Section (api.adsb.lol/v2/mil) */}
+            {milFlights.length > 0 && (
+              <div className="pt-3 border-t border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span className="flex items-center gap-1.5 font-tactical font-bold text-red-400">
+                    <Shield className="w-3.5 h-3.5 text-red-400" />
+                    CAF / DND & MILITARY AIR TRAFFIC
+                  </span>
+                  <span className="text-[10px] font-mono text-red-300 bg-red-950/80 px-1.5 py-0.2 rounded border border-red-500/40">
+                    {milFlights.length} ACTIVE
+                  </span>
+                </div>
+
+                {milFlights.slice(0, 8).map((ac) => {
+                  const isSelected = selectedFlight?.icao24 === ac.hex;
+                  return (
+                    <div
+                      key={ac.hex}
+                      onClick={() => {
+                        onSelectFlight(
+                          isSelected
+                            ? null
+                            : {
+                                icao24: ac.hex,
+                                callsign: ac.callsign,
+                                originCountry: 'MILITARY / DND',
+                                latitude: ac.latitude,
+                                longitude: ac.longitude,
+                                altitudeMeters: ac.altitudeFeet ? Math.round(ac.altitudeFeet * 0.3048) : null,
+                                altitudeFeet: ac.altitudeFeet,
+                                velocityKmh: ac.speedKnots ? Math.round(ac.speedKnots * 1.852) : null,
+                                trackHeading: ac.headingDeg,
+                                verticalRate: null,
+                                onGround: false,
+                                squawk: ac.squawk || null,
+                                distanceKmToListowel: ac.distanceKmToListowel,
+                                aircraftType: ac.aircraftType || 'Military Airframe',
+                                registration: ac.registration,
+                              }
+                        );
+                      }}
+                      className={`p-2 rounded border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-red-950/80 border-red-400 text-red-100 shadow-[0_0_12px_rgba(239,68,68,0.4)]'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-bold text-xs">
+                        <span className="flex items-center gap-1.5 text-red-300 truncate max-w-[170px]">
+                          <Plane className="w-3 h-3 text-red-400 flex-shrink-0" />
+                          {ac.callsign}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono font-normal">
+                          {ac.distanceKmToListowel} km out
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                        {ac.aircraftType || 'Transponder Hex: ' + ac.hex}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1 pt-1 border-t border-slate-800/60">
+                        <span>ALT: <span className="text-white font-bold">{ac.altitudeFeet ? ac.altitudeFeet.toLocaleString() + ' ft' : 'N/A'}</span></span>
+                        <span>SPD: <span className="text-white font-bold">{ac.speedKnots ? ac.speedKnots + ' kts' : 'N/A'}</span></span>
+                        <span>SQK: <span className="text-amber-300 font-bold">{ac.squawk || 'AUTO'}</span></span>
                       </div>
                     </div>
                   );

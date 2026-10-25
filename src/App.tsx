@@ -38,6 +38,7 @@ import {
   SeismicEvent,
   NaturalHazardEvent,
 } from './services/hazards';
+import { fetchLiveMilitaryFlights, MilitaryFlight } from './services/godseye';
 import { Layers, Activity, X, Sprout } from 'lucide-react';
 
 export function App() {
@@ -75,16 +76,19 @@ export function App() {
     hazards: true,
     drought: false,
     maritime: true,
+    military: true,
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
   const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
   const [selectedVessel, setSelectedVessel] = useState<MaritimeVessel | null>(null);
   const [opticMode, setOpticMode] = useState<OpticMode>('normal');
+  const [isGodsEyeActive, setIsGodsEyeActive] = useState<boolean>(false);
 
   // Live Data states (empty initial state - strictly no simulated baseline)
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [vessels, setVessels] = useState<MaritimeVessel[]>([]);
+  const [milFlights, setMilFlights] = useState<MilitaryFlight[]>([]);
   const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>([]);
   const [weather, setWeather] = useState<WeatherTelemetry | null>(null);
   const [cameras, setCameras] = useState<TrafficCamera[]>([]);
@@ -116,6 +120,7 @@ export function App() {
         fetchLiveEarthquakes(),
         fetchLiveNASAEvents(),
         fetchLiveLakeHuronVessels(),
+        fetchLiveMilitaryFlights(),
       ]);
 
       if (results[0].status === 'fulfilled') setFlights(results[0].value);
@@ -140,6 +145,7 @@ export function App() {
       if (results[8].status === 'fulfilled') setEarthquakes(results[8].value);
       if (results[9].status === 'fulfilled') setNasaEvents(results[9].value);
       if (results[10].status === 'fulfilled') setVessels(results[10].value);
+      if (results[11].status === 'fulfilled') setMilFlights(results[11].value);
 
 
     } catch (err) {
@@ -337,6 +343,8 @@ export function App() {
         criticalAlert={criticalAlert}
         opticMode={opticMode}
         onChangeOpticMode={setOpticMode}
+        isGodsEyeActive={isGodsEyeActive}
+        onToggleGodsEye={() => setIsGodsEyeActive((prev) => !prev)}
       />
 
       {/* Space Weather & Aurora Kp Ticker */}
@@ -370,6 +378,7 @@ export function App() {
             onChangeRadarOpacity={setRadarOpacity}
             flightCount={flights.length}
             vesselCount={vessels.length}
+            milFlightCount={milFlights.length}
           />
         </div>
 
@@ -395,6 +404,9 @@ export function App() {
             onChangeOpticMode={setOpticMode}
             selectedVessel={selectedVessel}
             onSelectVessel={setSelectedVessel}
+            milFlights={milFlights}
+            isGodsEyeActive={isGodsEyeActive}
+            onToggleGodsEye={() => setIsGodsEyeActive((prev) => !prev)}
           />
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
@@ -452,6 +464,7 @@ export function App() {
             vessels={vessels}
             selectedVessel={selectedVessel}
             onSelectVessel={setSelectedVessel}
+            milFlights={milFlights}
           />
         </div>
 
@@ -482,6 +495,7 @@ export function App() {
                   onChangeRadarOpacity={setRadarOpacity}
                   flightCount={flights.length}
                   vesselCount={vessels.length}
+                  milFlightCount={milFlights.length}
                 />
               </div>
             </div>
@@ -527,6 +541,7 @@ export function App() {
                   vessels={vessels}
                   selectedVessel={selectedVessel}
                   onSelectVessel={setSelectedVessel}
+                  milFlights={milFlights}
                 />
               </div>
             </div>

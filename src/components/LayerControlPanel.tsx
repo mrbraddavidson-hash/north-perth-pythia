@@ -18,6 +18,7 @@ import {
   Activity,
   Sprout,
   Ship,
+  Shield,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -28,6 +29,7 @@ interface LayerControlPanelProps {
   onChangeRadarOpacity: (val: number) => void;
   flightCount: number;
   vesselCount?: number;
+  milFlightCount?: number;
 }
 
 export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
@@ -37,6 +39,7 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
   onChangeRadarOpacity,
   flightCount,
   vesselCount = 0,
+  milFlightCount = 0,
 }) => {
   const layerItems: {
     key: keyof ActiveLayers;
@@ -133,6 +136,14 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
       icon: <Sprout className="w-4 h-4" />,
       color: 'text-amber-500',
       badge: 'AAFC CDM',
+    },
+    {
+      key: 'military',
+      label: 'CAF & Military Recon',
+      sublabel: 'DND Bases & api.adsb.lol/mil',
+      icon: <Shield className="w-4 h-4" />,
+      color: 'text-red-400',
+      badge: `${milFlightCount} MIL AIRCRAFT`,
     },
     {
       key: 'satellites',
