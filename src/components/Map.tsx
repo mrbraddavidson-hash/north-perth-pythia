@@ -43,7 +43,6 @@ import {
   X,
   Shield,
 } from 'lucide-react';
-import { GodsEyeOverlay } from './GodsEyeOverlay';
 import {
   MilitaryFlight,
   CANADIAN_MILITARY_INSTALLATIONS,
@@ -70,8 +69,6 @@ interface MapProps {
   selectedVessel?: MaritimeVessel | null;
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
   milFlights?: MilitaryFlight[];
-  isGodsEyeActive?: boolean;
-  onToggleGodsEye?: () => void;
 }
 
 type MapStyle = 'tactical' | 'streets' | 'satellite' | 'topo';
@@ -97,8 +94,6 @@ export const MapView: React.FC<MapProps> = ({
   selectedVessel = null,
   onSelectVessel,
   milFlights = [],
-  isGodsEyeActive = false,
-  onToggleGodsEye,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -1085,13 +1080,12 @@ export const MapView: React.FC<MapProps> = ({
     });
   }, [earthquakes, layers.seismic]);
 
-  // Military & CAF Installations and Flights Layer (God's Eye Recon)
+  // Military & CAF Installations and Flights Layer
   useEffect(() => {
     if (!militaryGroupRef.current) return;
     militaryGroupRef.current.clearLayers();
 
-    const isVisible = layers.military || isGodsEyeActive;
-    if (!isVisible) return;
+    if (!layers.military) return;
 
     // 1. Canadian Armed Forces Installations
     CANADIAN_MILITARY_INSTALLATIONS.forEach((base) => {
@@ -1202,27 +1196,11 @@ export const MapView: React.FC<MapProps> = ({
         </div>
       `);
     });
-  }, [milFlights, layers.military, isGodsEyeActive]);
+  }, [milFlights, layers.military]);
 
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
-
-      {/* God's Eye Recon HUD Overlay (bilawalsidhu/gods-eye-view) */}
-      <GodsEyeOverlay
-        isActive={!!isGodsEyeActive}
-        onToggle={() => onToggleGodsEye && onToggleGodsEye()}
-        centerLat={currentCenter[0]}
-        centerLon={currentCenter[1]}
-        zoom={currentZoom}
-        milFlightCount={milFlights.length}
-        nearestBaseName="Stratford Garrison (31 CBG)"
-        nearestBaseDistanceKm={40}
-        targetName="NORTH PERTH / LISTOWEL CORE"
-        onLockListowel={() => {
-          mapInstanceRef.current?.flyTo(NORTH_PERTH_COORDS, 13, { duration: 1.5 });
-        }}
-      />
 
       {/* Top Floating Quick Preset Bar */}
       {onApplyPreset && (
@@ -1263,9 +1241,9 @@ export const MapView: React.FC<MapProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between pb-1.5 border-b border-cyan-500/30 mb-2">
             <div className="flex items-center gap-1.5">
-              <Target className="w-4 h-4 text-cyan-400 animate-spin" style={{ animationDuration: '6s' }} />
+              <Target className="w-4 h-4 text-cyan-400" />
               <span className="font-tactical font-bold text-white tracking-wider text-xs">
-                GOD'S EYE // TARGET ACQUIRED
+                TRACKING // LIVE TELEMETRY
               </span>
             </div>
             <button
@@ -1346,7 +1324,7 @@ export const MapView: React.FC<MapProps> = ({
               {cameraTrackLock ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
               {cameraTrackLock ? 'TRACK LOCK: ENGAGED' : 'CAMERA TRACK LOCK'}
             </button>
-            <span className="text-[9px] text-slate-500 font-mono">GOD'S EYE GEOINT</span>
+            <span className="text-[9px] text-slate-500 font-mono">NORTH PERTH SENSOR MESH</span>
           </div>
         </div>
       )}

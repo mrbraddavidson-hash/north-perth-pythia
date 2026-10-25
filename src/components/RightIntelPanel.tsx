@@ -361,13 +361,13 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               })
             )}
 
-            {/* God's Eye Maritime AIS Section (Lake Huron & Goderich Salt Port) */}
+            {/* Maritime AIS Section (Lake Huron & Goderich Salt Port) */}
             {vessels.length > 0 && (
               <div className="pt-3 border-t border-slate-800 space-y-2">
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span className="flex items-center gap-1.5 font-tactical font-bold text-teal-400">
                     <Ship className="w-3.5 h-3.5 text-teal-400" />
-                    LAKE HURON // GODERICH MARITIME AIS
+                    LAKE HURON & GODERICH VESSELS (AIS)
                   </span>
                   <span className="text-[10px] font-mono text-teal-300">{vessels.length} SHIPS</span>
                 </div>
@@ -409,13 +409,13 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               </div>
             )}
 
-            {/* God's Eye Military Recon Flights Section (api.adsb.lol/v2/mil) */}
+            {/* Military Flights Section (api.adsb.lol/v2/mil) */}
             {milFlights.length > 0 && (
               <div className="pt-3 border-t border-slate-800 space-y-2">
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span className="flex items-center gap-1.5 font-tactical font-bold text-red-400">
                     <Shield className="w-3.5 h-3.5 text-red-400" />
-                    CAF / DND & MILITARY AIR TRAFFIC
+                    MILITARY AIR TRAFFIC (LIVE ADS-B)
                   </span>
                   <span className="text-[10px] font-mono text-red-300 bg-red-950/80 px-1.5 py-0.2 rounded border border-red-500/40">
                     {milFlights.length} ACTIVE

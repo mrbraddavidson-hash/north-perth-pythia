@@ -83,7 +83,6 @@ export function App() {
   const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
   const [selectedVessel, setSelectedVessel] = useState<MaritimeVessel | null>(null);
   const [opticMode, setOpticMode] = useState<OpticMode>('normal');
-  const [isGodsEyeActive, setIsGodsEyeActive] = useState<boolean>(false);
 
   // Live Data states (empty initial state - strictly no simulated baseline)
   const [flights, setFlights] = useState<FlightData[]>([]);
@@ -343,8 +342,6 @@ export function App() {
         criticalAlert={criticalAlert}
         opticMode={opticMode}
         onChangeOpticMode={setOpticMode}
-        isGodsEyeActive={isGodsEyeActive}
-        onToggleGodsEye={() => setIsGodsEyeActive((prev) => !prev)}
       />
 
       {/* Space Weather & Aurora Kp Ticker */}
@@ -405,8 +402,6 @@ export function App() {
             selectedVessel={selectedVessel}
             onSelectVessel={setSelectedVessel}
             milFlights={milFlights}
-            isGodsEyeActive={isGodsEyeActive}
-            onToggleGodsEye={() => setIsGodsEyeActive((prev) => !prev)}
           />
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}

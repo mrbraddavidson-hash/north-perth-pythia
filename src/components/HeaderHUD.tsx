@@ -27,8 +27,6 @@ interface HeaderHUDProps {
   criticalAlert?: string | null;
   opticMode?: OpticMode;
   onChangeOpticMode?: (mode: OpticMode) => void;
-  isGodsEyeActive?: boolean;
-  onToggleGodsEye?: () => void;
 }
 
 export const HeaderHUD: React.FC<HeaderHUDProps> = ({
@@ -42,8 +40,6 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   criticalAlert,
   opticMode = 'normal',
   onChangeOpticMode,
-  isGodsEyeActive = false,
-  onToggleGodsEye,
 }) => {
   const [timeUtc, setTimeUtc] = useState<string>('');
   const [timeLocal, setTimeLocal] = useState<string>('');
@@ -223,29 +219,6 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
               CRT
             </button>
           </div>
-        )}
-
-        {/* God's Eye Recon HUD Mode Toggle (bilawalsidhu/gods-eye-view) */}
-        {onToggleGodsEye && (
-          <button
-            onClick={onToggleGodsEye}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-mono text-[10px] md:text-xs font-black transition-all cursor-pointer min-h-[32px] border ${
-              isGodsEyeActive
-                ? 'bg-red-600 text-white border-red-400 shadow-[0_0_15px_#ef4444] animate-pulse'
-                : 'bg-slate-900/90 text-amber-300 border-amber-500/40 hover:bg-slate-800 hover:border-amber-400'
-            }`}
-            title="Toggle God's Eye Overhead Reconnaissance HUD (NRO/NGA Standard)"
-          >
-            <Crosshair className={`w-3.5 h-3.5 ${isGodsEyeActive ? 'animate-spin' : 'text-amber-400'}`} />
-            <span className="tracking-wider">GOD'S EYE</span>
-            <span
-              className={`text-[9px] px-1 py-0.2 rounded font-bold ${
-                isGodsEyeActive ? 'bg-black/60 text-white' : 'bg-amber-950 text-amber-300'
-              }`}
-            >
-              {isGodsEyeActive ? 'ACTIVE' : 'OFF'}
-            </span>
-          </button>
         )}
 
         {/* Local Clock (Hidden on very small screens) */}

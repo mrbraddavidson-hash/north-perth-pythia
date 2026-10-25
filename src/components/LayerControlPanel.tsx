@@ -139,8 +139,8 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
     },
     {
       key: 'military',
-      label: 'CAF & Military Recon',
-      sublabel: 'DND Bases & api.adsb.lol/mil',
+      label: 'Military Flights & Bases',
+      sublabel: 'ADS-B Transponders & CAF Bases',
       icon: <Shield className="w-4 h-4" />,
       color: 'text-red-400',
       badge: `${milFlightCount} MIL AIRCRAFT`,
