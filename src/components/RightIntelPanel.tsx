@@ -2,84 +2,59 @@ import React, { useState } from 'react';
 import {
   Cpu,
   Plane,
-  AlertTriangle,
-  Zap,
   Waves,
-  ShieldAlert,
   ChevronRight,
-  TrendingDown,
-  TrendingUp,
-  Clock,
   Sparkles,
   Sprout,
   HeartPulse,
   CloudLightning,
-  Construction,
-  Droplets,
-  Building2,
   Activity,
-  Flame,
+  Ship,
+  Anchor,
+  Shield,
+  Clock,
 } from 'lucide-react';
 import {
   FlightData,
   RiverGaugeData,
   WeatherTelemetry,
-  HydroOutage,
-  EmergencyDispatch,
-  SchoolBusAlert,
-  LiveIncidentEvent,
 } from '../services/types';
 import {
   getMvcaWatershedBulletin,
   getWeatherAlerts,
 } from '../services/api';
-import { SeismicEvent, NaturalHazardEvent } from '../services/hazards';
+import { SeismicEvent } from '../services/hazards';
 import { MaritimeVessel } from '../services/maritime';
-import { LiveIncidentsWidget } from './LiveIncidentsWidget';
-import { ScannerPlayerWidget } from './ScannerPlayerWidget';
-import { Ship, Anchor, Compass, Shield } from 'lucide-react';
 import { MilitaryFlight } from '../services/godseye';
 
 interface RightIntelPanelProps {
   weather: WeatherTelemetry | null;
   riverGauges: RiverGaugeData[];
   flights: FlightData[];
-  outages: HydroOutage[];
-  dispatches: EmergencyDispatch[];
-  buses: SchoolBusAlert[];
-  incidents: LiveIncidentEvent[];
-  earthquakes?: SeismicEvent[];
-  nasaEvents?: NaturalHazardEvent[];
   selectedFlight: FlightData | null;
   onSelectFlight: (flight: FlightData | null) => void;
-  onSelectIncident?: (incident: LiveIncidentEvent) => void;
   onOpenAgriModal: () => void;
   vessels?: MaritimeVessel[];
   selectedVessel?: MaritimeVessel | null;
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
   milFlights?: MilitaryFlight[];
+  earthquakes?: SeismicEvent[];
 }
 
 export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   weather,
   riverGauges,
   flights,
-  outages,
-  dispatches,
-  buses,
-  incidents,
-  earthquakes = [],
-  nasaEvents = [],
   selectedFlight,
   onSelectFlight,
-  onSelectIncident,
   onOpenAgriModal,
   vessels = [],
   selectedVessel = null,
   onSelectVessel,
   milFlights = [],
+  earthquakes = [],
 }) => {
-  const [activeTab, setActiveTab] = useState<'oracle' | 'airspace' | 'logs'>('oracle');
+  const [activeTab, setActiveTab] = useState<'oracle' | 'airspace' | 'seismic'>('oracle');
 
   const mainGauge = riverGauges.find((g) => g.stationId === '02FE003') || riverGauges[0];
   const orngeFlight = flights.find((f) => f.callsign.includes('ORNGE') || f.callsign.includes('MEDEVAC'));
@@ -111,18 +86,18 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           }`}
         >
           <Plane className="w-3.5 h-3.5" />
-          AIRSPACE ({flights.length})
+          AIR & SEA ({flights.length + vessels.length + milFlights.length})
         </button>
         <button
-          onClick={() => setActiveTab('logs')}
+          onClick={() => setActiveTab('seismic')}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            activeTab === 'logs'
+            activeTab === 'seismic'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <ShieldAlert className="w-3.5 h-3.5" />
-          HAZARDS & SCANNER
+          <Activity className="w-3.5 h-3.5" />
+          SEISMIC ({earthquakes.length})
         </button>
       </div>
 
@@ -264,11 +239,11 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               {/* Airspace & Transport Corridors */}
               <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800 space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-semibold text-cyan-300">Corridors & Airspace</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">LIVE ADS-B / 511</span>
+                  <span className="font-semibold text-cyan-300">Overhead Airspace</span>
+                  <span className="text-[10px] text-emerald-400 font-mono">LIVE ADS-B MESH</span>
                 </div>
                 <p className="text-[10px] text-slate-300 leading-normal">
-                  {flights.length} transponder aircraft tracked in 70 NM radius. {incidents.length} active MTO emergency incident/closure notices recorded along surrounding Southwestern Ontario corridors.
+                  {flights.length + milFlights.length} transponder aircraft tracked across Southwestern Ontario airspace ({flights.length} civilian, {milFlights.length} military).
                 </p>
               </div>
             </div>
@@ -481,87 +456,48 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 3: LIVE SCANNER, 511 INCIDENTS & HAZARDS */}
-        {activeTab === 'logs' && (
+        {/* TAB 3: REGIONAL SEISMIC ACTIVITY (USGS LIVE) */}
+        {activeTab === 'seismic' && (
           <div className="space-y-3">
-            {/* Native In-Page Live Tactical Scanner Audio Player */}
-            <ScannerPlayerWidget />
+            <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
+              <span className="flex items-center gap-1.5 font-bold text-amber-400">
+                <Activity className="w-3.5 h-3.5 text-amber-400" />
+                REGIONAL SEISMIC MONITOR (USGS)
+              </span>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40">
+                {earthquakes.length} RECORDED (M2.0+)
+              </span>
+            </div>
 
-            {/* Real-time MTO & OPP Live Incidents Widget */}
-            <LiveIncidentsWidget
-              incidents={incidents}
-              onSelectIncident={onSelectIncident}
-            />
-
-            {/* Live USGS & Earthquakes Canada Regional Seismic Activity */}
-            {earthquakes && earthquakes.length > 0 && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                <div className="flex items-center justify-between text-[10px] font-tactical tracking-wider text-amber-400">
-                  <span className="flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5 text-amber-400" />
-                    REGIONAL SEISMIC MONITOR (USGS)
-                  </span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono">
-                    LIVE FEED
-                  </span>
-                </div>
-                {earthquakes.slice(0, 5).map((q) => (
-                  <div key={q.id} className="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1">
+            {earthquakes && earthquakes.length > 0 ? (
+              <div className="space-y-2">
+                {earthquakes.map((q) => (
+                  <div key={q.id} className="p-2.5 rounded bg-slate-900/60 border border-slate-800 space-y-1.5">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-amber-300 flex items-center gap-1">
-                        <span className="px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 font-bold text-[10px] border border-amber-500/40 font-mono">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 font-bold text-[10px] border border-amber-500/40 font-mono">
                           M {q.magnitude}
                         </span>
-                        <span className="truncate max-w-[190px]">{q.place}</span>
+                        <span className="truncate max-w-[210px]">{q.place}</span>
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono">{q.time}</span>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span>Depth: {q.depthKm} km</span>
-                      <span className="text-cyan-300 font-semibold">{q.distanceKmToListowel} km from Listowel</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Live NASA EONET Active Natural Hazards */}
-            {nasaEvents && nasaEvents.length > 0 && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                <div className="flex items-center justify-between text-[10px] font-tactical tracking-wider text-rose-400">
-                  <span className="flex items-center gap-1.5">
-                    <Flame className="w-3.5 h-3.5 text-rose-400" />
-                    NASA EONET ACTIVE DISASTERS
-                  </span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono">
-                    LIVE SATELLITE
-                  </span>
-                </div>
-                {nasaEvents.slice(0, 4).map((h) => (
-                  <div key={h.id} className="p-2 rounded bg-slate-900/60 border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-rose-300 truncate max-w-[210px]">{h.title}</span>
-                      <span className="text-[10px] text-slate-500 font-mono">{h.date}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span className="text-slate-300">{h.category}</span>
-                      <span className="text-cyan-300 font-semibold">{h.distanceKmToListowel} km out</span>
+                    <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-400 pt-1 border-t border-slate-800/60 font-mono">
+                      <div>DEPTH: <span className="text-white font-semibold">{q.depthKm} km</span></div>
+                      <div>TIME: <span className="text-slate-300">{q.time}</span></div>
+                      <div className="col-span-2 text-cyan-300 font-semibold">
+                        RANGE: <span className="text-white font-bold">{q.distanceKmToListowel} km</span> from Listowel
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-
-            {/* Municipal & Utility Feeds Integrity Notice */}
-            <div className="p-3 rounded border border-slate-800 bg-slate-900/40 text-slate-400 text-[10px] space-y-1 mt-2">
-              <div className="font-semibold text-slate-300 flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
-                LOCAL CAD & UTILITY DATA INTEGRITY
+            ) : (
+              <div className="p-5 rounded border border-slate-800 bg-slate-900/40 text-center text-slate-400 text-xs space-y-1.5">
+                <Activity className="w-6 h-6 mx-auto text-slate-600 mb-1" />
+                <div className="font-semibold text-slate-300">NO RECENT REGIONAL EVENTS</div>
+                <div className="text-[10px] text-slate-500">USGS seismometer network reporting quiet baseline across Great Lakes basin (M2.0+).</div>
               </div>
-              <p className="text-slate-400 leading-relaxed text-[10px]">
-                Perth County OPP, North Perth Fire, and Hydro One operate on private dispatch channels. Synthetic entries have been permanently removed to ensure 100% verified sensor truth.
-              </p>
-            </div>
+            )}
           </div>
         )}
       </div>

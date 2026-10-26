@@ -3,7 +3,6 @@ import { HeaderHUD } from './components/HeaderHUD';
 import { LayerControlPanel } from './components/LayerControlPanel';
 import { RightIntelPanel } from './components/RightIntelPanel';
 import { MapView } from './components/Map';
-import { KeySetupModal } from './components/KeySetupModal';
 import { SpaceWeatherBar } from './components/SpaceWeatherBar';
 import { AgriFuelModal } from './components/AgriFuelModal';
 import {
@@ -11,12 +10,6 @@ import {
   FlightData,
   RiverGaugeData,
   WeatherTelemetry,
-  TrafficCamera,
-  RoadCondition,
-  HydroOutage,
-  EmergencyDispatch,
-  SchoolBusAlert,
-  LiveIncidentEvent,
   OpticMode,
 } from './services/types';
 import { fetchLiveLakeHuronVessels, MaritimeVessel } from './services/maritime';
@@ -24,59 +17,37 @@ import {
   fetchLiveFlights,
   fetchRiverGauges,
   fetchWeatherTelemetry,
-  fetchTrafficCameras,
-  fetchRoadConditions,
-  fetchLive511Incidents,
-  DEFAULT_ONTARIO_511_KEY,
   NORTH_PERTH_COORDS,
 } from './services/api';
 import { fetchAuroraKp, fetchLiveIss, AuroraData, IssTelemetry } from './services/space';
 import { calculateSquallTrajectory, SquallTrajectory } from './services/squall';
 import {
   fetchLiveEarthquakes,
-  fetchLiveNASAEvents,
   SeismicEvent,
-  NaturalHazardEvent,
 } from './services/hazards';
 import { fetchLiveMilitaryFlights, MilitaryFlight } from './services/godseye';
 import { Layers, Activity, X, Sprout } from 'lucide-react';
 
 export function App() {
-  // 511 API Key state
-  const [apiKey, setApiKey] = useState<string>(() => {
-    return (
-      (typeof window !== 'undefined' ? localStorage.getItem('ONTARIO_511_KEY') : null) ||
-      DEFAULT_ONTARIO_511_KEY
-    );
-  });
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
   const [isAgriModalOpen, setIsAgriModalOpen] = useState<boolean>(false);
 
   // Mobile drawer states: 'none' | 'layers' | 'intel'
   const [mobileDrawer, setMobileDrawer] = useState<'none' | 'layers' | 'intel'>('none');
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-
-  // Layer visibility state
+  // Layer visibility state - ONLY verified functioning live feeds
   const [layers, setLayers] = useState<ActiveLayers>({
     towns: true,
     radar: true,
     squall: true,
     flights: true,
-    helipad: true,
-    river: true,
-    cams: true,
-    roads: true,
-    weather: true,
-    hydro: false,
-    dispatches: true,
-    buses: false,
-    satellites: true,
-    seismic: true,
-    hazards: true,
-    drought: false,
-    maritime: true,
     military: true,
+    river: true,
+    weather: true,
+    maritime: true,
+    helipad: true,
+    seismic: true,
+    drought: false,
+    satellites: true,
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
@@ -90,17 +61,10 @@ export function App() {
   const [milFlights, setMilFlights] = useState<MilitaryFlight[]>([]);
   const [riverGauges, setRiverGauges] = useState<RiverGaugeData[]>([]);
   const [weather, setWeather] = useState<WeatherTelemetry | null>(null);
-  const [cameras, setCameras] = useState<TrafficCamera[]>([]);
-  const [roads, setRoads] = useState<RoadCondition[]>([]);
-  const [outages, setOutages] = useState<HydroOutage[]>([]);
-  const [dispatches, setDispatches] = useState<EmergencyDispatch[]>([]);
-  const [buses, setBuses] = useState<SchoolBusAlert[]>([]);
   const [aurora, setAurora] = useState<AuroraData | null>(null);
   const [iss, setIss] = useState<IssTelemetry | null>(null);
   const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
-  const [incidents, setIncidents] = useState<LiveIncidentEvent[]>([]);
   const [earthquakes, setEarthquakes] = useState<SeismicEvent[]>([]);
-  const [nasaEvents, setNasaEvents] = useState<NaturalHazardEvent[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Load all live feeds
@@ -111,13 +75,9 @@ export function App() {
         fetchLiveFlights(),
         fetchRiverGauges(),
         fetchWeatherTelemetry(),
-        fetchTrafficCameras(apiKey),
-        fetchRoadConditions(apiKey),
         fetchAuroraKp(),
         fetchLiveIss(),
-        fetchLive511Incidents(apiKey),
         fetchLiveEarthquakes(),
-        fetchLiveNASAEvents(),
         fetchLiveLakeHuronVessels(),
         fetchLiveMilitaryFlights(),
       ]);
@@ -136,77 +96,25 @@ export function App() {
           setSquallTrajectory(squall);
         }
       }
-      if (results[3].status === 'fulfilled') setCameras(results[3].value);
-      if (results[4].status === 'fulfilled') setRoads(results[4].value);
-      if (results[5].status === 'fulfilled') setAurora(results[5].value);
-      if (results[6].status === 'fulfilled') setIss(results[6].value);
-      if (results[7].status === 'fulfilled') setIncidents(results[7].value);
-      if (results[8].status === 'fulfilled') setEarthquakes(results[8].value);
-      if (results[9].status === 'fulfilled') setNasaEvents(results[9].value);
-      if (results[10].status === 'fulfilled') setVessels(results[10].value);
-      if (results[11].status === 'fulfilled') setMilFlights(results[11].value);
-
+      if (results[3].status === 'fulfilled') setAurora(results[3].value);
+      if (results[4].status === 'fulfilled') setIss(results[4].value);
+      if (results[5].status === 'fulfilled') setEarthquakes(results[5].value);
+      if (results[6].status === 'fulfilled') setVessels(results[6].value);
+      if (results[7].status === 'fulfilled') setMilFlights(results[7].value);
 
     } catch (err) {
       console.error('Error refreshing feeds:', err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [apiKey]);
-
-  const handleSaveApiKey = (newKey: string) => {
-    setApiKey(newKey);
-    if (newKey) {
-      localStorage.setItem('ONTARIO_511_KEY', newKey);
-    } else {
-      localStorage.removeItem('ONTARIO_511_KEY');
-    }
-    setTimeout(() => refreshAllFeeds(), 100);
-  };
+  }, []);
 
   useEffect(() => {
-    // Initial fetch in background
     refreshAllFeeds();
-
-    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 768;
-    // 45s on mobile / cellular to conserve data & battery, 20s on desktop
-    const pollIntervalMs = isMobileDevice ? 45000 : 20000;
-
-    let intervalId: any = null;
-
-    const startPolling = () => {
-      if (!intervalId) {
-        intervalId = setInterval(() => {
-          if (!document.hidden) {
-            refreshAllFeeds();
-          }
-        }, pollIntervalMs);
-      }
-    };
-
-    const stopPolling = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        refreshAllFeeds();
-        startPolling();
-      }
-    };
-
-    startPolling();
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    const interval = setInterval(() => {
+      if (!document.hidden) refreshAllFeeds();
+    }, 20000);
+    return () => clearInterval(interval);
   }, [refreshAllFeeds]);
 
   const handleToggleLayer = (key: keyof ActiveLayers) => {
@@ -230,7 +138,6 @@ export function App() {
   const handleTrackIss = () => {
     if (iss) {
       setLayers((prev) => ({ ...prev, satellites: true }));
-      // Focus map on ISS coordinates
       window.dispatchEvent(
         new CustomEvent('focus-coordinates', {
           detail: { coords: [iss.latitude, iss.longitude], zoom: 4 },
@@ -246,10 +153,6 @@ export function App() {
     if (ornge && ornge.distanceKmToListowel < 25) {
       return `ORNGE MEDEVAC INBOUND // ${ornge.distanceKmToListowel}KM`;
     }
-    const closure = incidents.find((i) => i.isFullClosure);
-    if (closure) {
-      return `HIGHWAY CLOSURE: ${closure.road.toUpperCase()}`;
-    }
     const mainRiver = riverGauges.find((g) => g.stationId === '02FE003');
     if (mainRiver && mainRiver.floodStageAlert !== 'NORMAL') {
       return `MAITLAND RIVER ${mainRiver.floodStageAlert} // ${mainRiver.waterLevelMeters.toFixed(2)}M`;
@@ -258,23 +161,22 @@ export function App() {
       return `HIGH WIND GUSTS: ${weather.windGustsKmh} KM/H`;
     }
     return null;
-  }, [flights, incidents, riverGauges, weather]);
+  }, [flights, riverGauges, weather]);
 
-  const handleApplyPreset = (preset: 'all' | 'weather' | 'corridors' | 'airspace') => {
+  const handleApplyPreset = (preset: 'all' | 'weather' | 'rivers' | 'airspace') => {
     if (preset === 'all') {
       setLayers({
         towns: true,
         radar: true,
         squall: true,
         flights: true,
-        helipad: true,
+        military: true,
         river: true,
-        cams: true,
-        roads: true,
         weather: true,
-        hydro: true,
-        dispatches: true,
-        buses: true,
+        maritime: true,
+        helipad: true,
+        seismic: true,
+        drought: false,
         satellites: true,
       });
     } else if (preset === 'weather') {
@@ -283,30 +185,28 @@ export function App() {
         radar: true,
         squall: true,
         flights: false,
-        helipad: false,
+        military: false,
         river: true,
-        cams: false,
-        roads: false,
         weather: true,
-        hydro: false,
-        dispatches: false,
-        buses: false,
+        maritime: false,
+        helipad: false,
+        seismic: false,
+        drought: true,
         satellites: false,
       });
-    } else if (preset === 'corridors') {
+    } else if (preset === 'rivers') {
       setLayers({
         towns: true,
-        radar: false,
+        radar: true,
         squall: false,
         flights: false,
-        helipad: false,
-        river: false,
-        cams: true,
-        roads: true,
-        weather: false,
-        hydro: true,
-        dispatches: true,
-        buses: true,
+        military: false,
+        river: true,
+        weather: true,
+        maritime: false,
+        helipad: true,
+        seismic: false,
+        drought: true,
         satellites: false,
       });
     } else if (preset === 'airspace') {
@@ -315,14 +215,13 @@ export function App() {
         radar: false,
         squall: false,
         flights: true,
-        helipad: true,
+        military: true,
         river: false,
-        cams: false,
-        roads: false,
         weather: false,
-        hydro: false,
-        dispatches: false,
-        buses: false,
+        maritime: true,
+        helipad: true,
+        seismic: false,
+        drought: false,
         satellites: true,
       });
     }
@@ -337,8 +236,6 @@ export function App() {
         onRefresh={refreshAllFeeds}
         isRefreshing={isRefreshing}
         activeLayersCount={activeLayersCount}
-        hasApiKey={Boolean(apiKey)}
-        onOpenKeyModal={() => setIsKeyModalOpen(true)}
         criticalAlert={criticalAlert}
         opticMode={opticMode}
         onChangeOpticMode={setOpticMode}
@@ -346,14 +243,6 @@ export function App() {
 
       {/* Space Weather & Aurora Kp Ticker */}
       <SpaceWeatherBar aurora={aurora} iss={iss} onTrackIss={handleTrackIss} />
-
-      {/* Key Setup Modal */}
-      <KeySetupModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-        onSaveKey={handleSaveApiKey}
-        currentKey={apiKey}
-      />
 
       {/* Agri & Fuel Intel Modal */}
       <AgriFuelModal
@@ -385,15 +274,11 @@ export function App() {
             layers={layers}
             flights={flights}
             riverGauges={riverGauges}
-            cameras={cameras}
-            roads={roads}
-            outages={outages}
             selectedFlight={selectedFlight}
             onSelectFlight={handleSelectFlight}
             radarOpacity={radarOpacity}
             squallTrajectory={squallTrajectory}
             iss={iss}
-            incidents={incidents}
             earthquakes={earthquakes}
             onApplyPreset={handleApplyPreset}
             vessels={vessels}
@@ -435,7 +320,7 @@ export function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform cursor-pointer"
               >
                 <Activity className="w-3.5 h-3.5 text-amber-400" />
-                <span>Sitrep ({flights.length + vessels.length})</span>
+                <span>Sitrep ({flights.length + vessels.length + milFlights.length})</span>
               </button>
             </div>
           </div>
@@ -447,12 +332,7 @@ export function App() {
             weather={weather}
             riverGauges={riverGauges}
             flights={flights}
-            outages={outages}
-            dispatches={dispatches}
-            buses={buses}
-            incidents={incidents}
             earthquakes={earthquakes}
-            nasaEvents={nasaEvents}
             selectedFlight={selectedFlight}
             onSelectFlight={handleSelectFlight}
             onOpenAgriModal={() => setIsAgriModalOpen(true)}
@@ -497,7 +377,7 @@ export function App() {
           </div>
         )}
 
-        {/* MOBILE Slide-out Drawer: Intel & Radio Scanner */}
+        {/* MOBILE Slide-out Drawer: Intel & Airspace */}
         {mobileDrawer === 'intel' && (
           <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
             <div className="absolute inset-0" onClick={() => setMobileDrawer('none')} />
@@ -506,7 +386,7 @@ export function App() {
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-amber-400" />
                   <span className="font-tactical text-sm font-bold text-white tracking-wider">
-                    SITREP, INCIDENTS & AIRSPACE
+                    SITREP, AIRSPACE & SEISMIC
                   </span>
                 </div>
                 <button
@@ -521,12 +401,7 @@ export function App() {
                   weather={weather}
                   riverGauges={riverGauges}
                   flights={flights}
-                  outages={outages}
-                  dispatches={dispatches}
-                  buses={buses}
-                  incidents={incidents}
                   earthquakes={earthquakes}
-                  nasaEvents={nasaEvents}
                   selectedFlight={selectedFlight}
                   onSelectFlight={handleSelectFlight}
                   onOpenAgriModal={() => {

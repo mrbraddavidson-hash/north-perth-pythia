@@ -118,21 +118,14 @@ export interface ActiveLayers {
   radar: boolean;
   squall: boolean;
   flights: boolean;
-  helipad: boolean;
+  military: boolean;
   river: boolean;
-  cams: boolean;
-  roads: boolean;
   weather: boolean;
-  hydro: boolean;
-  dispatches: boolean;
-  buses: boolean;
+  maritime: boolean;
+  helipad: boolean;
+  seismic: boolean;
+  drought: boolean;
   satellites: boolean;
-  seismic?: boolean;
-  hazards?: boolean;
-  drought?: boolean;
-  maritime?: boolean;
-  military?: boolean;
-  godseye?: boolean;
 }
 
 export type OpticMode = 'normal' | 'flir' | 'nvg' | 'crt';

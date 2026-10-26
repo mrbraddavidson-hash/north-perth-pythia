@@ -52,17 +52,13 @@ interface MapProps {
   layers: ActiveLayers;
   flights: FlightData[];
   riverGauges: RiverGaugeData[];
-  cameras: TrafficCamera[];
-  roads: RoadCondition[];
-  outages: HydroOutage[];
   selectedFlight: FlightData | null;
   onSelectFlight: (flight: FlightData | null) => void;
   radarOpacity: number;
   squallTrajectory?: SquallTrajectory | null;
   iss?: IssTelemetry | null;
-  incidents?: LiveIncidentEvent[];
   earthquakes?: SeismicEvent[];
-  onApplyPreset?: (preset: 'all' | 'weather' | 'corridors' | 'airspace') => void;
+  onApplyPreset?: (preset: 'all' | 'weather' | 'rivers' | 'airspace') => void;
   vessels?: MaritimeVessel[];
   opticMode?: OpticMode;
   onChangeOpticMode?: (mode: OpticMode) => void;
@@ -77,15 +73,11 @@ export const MapView: React.FC<MapProps> = ({
   layers,
   flights,
   riverGauges,
-  cameras,
-  roads,
-  outages,
   selectedFlight,
   onSelectFlight,
   radarOpacity,
   squallTrajectory,
   iss,
-  incidents = [],
   earthquakes = [],
   onApplyPreset,
   vessels = [],
@@ -122,13 +114,9 @@ export const MapView: React.FC<MapProps> = ({
   const townsGroupRef = useRef<L.LayerGroup | null>(null);
   const flightsGroupRef = useRef<L.LayerGroup | null>(null);
   const riverGroupRef = useRef<L.LayerGroup | null>(null);
-  const camsGroupRef = useRef<L.LayerGroup | null>(null);
-  const roadsGroupRef = useRef<L.LayerGroup | null>(null);
-  const outagesGroupRef = useRef<L.LayerGroup | null>(null);
   const helipadGroupRef = useRef<L.LayerGroup | null>(null);
   const squallGroupRef = useRef<L.LayerGroup | null>(null);
   const issGroupRef = useRef<L.LayerGroup | null>(null);
-  const incidentsGroupRef = useRef<L.LayerGroup | null>(null);
   const seismicGroupRef = useRef<L.LayerGroup | null>(null);
   const vesselsGroupRef = useRef<L.LayerGroup | null>(null);
   const militaryGroupRef = useRef<L.LayerGroup | null>(null);
@@ -209,13 +197,9 @@ export const MapView: React.FC<MapProps> = ({
     townsGroupRef.current = L.layerGroup().addTo(map);
     flightsGroupRef.current = L.layerGroup().addTo(map);
     riverGroupRef.current = L.layerGroup().addTo(map);
-    camsGroupRef.current = L.layerGroup().addTo(map);
-    roadsGroupRef.current = L.layerGroup().addTo(map);
-    outagesGroupRef.current = L.layerGroup().addTo(map);
     helipadGroupRef.current = L.layerGroup().addTo(map);
     squallGroupRef.current = L.layerGroup().addTo(map);
     issGroupRef.current = L.layerGroup().addTo(map);
-    incidentsGroupRef.current = L.layerGroup().addTo(map);
     seismicGroupRef.current = L.layerGroup().addTo(map);
     vesselsGroupRef.current = L.layerGroup().addTo(map);
     militaryGroupRef.current = L.layerGroup().addTo(map);
@@ -691,144 +675,6 @@ export const MapView: React.FC<MapProps> = ({
     });
   }, [riverGauges, layers.river]);
 
-  // Render Traffic Cameras
-  useEffect(() => {
-    if (!camsGroupRef.current || !mapInstanceRef.current) return;
-    camsGroupRef.current.clearLayers();
-
-    if (!layers.cams) return;
-
-    cameras.forEach((cam) => {
-      const icon = L.divIcon({
-        className: 'camera-marker-icon',
-        html: `
-          <div class="flex items-center justify-center w-7 h-7 rounded-full bg-slate-950/95 border-2 border-indigo-400 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.4)] cursor-pointer hover:scale-110 transition-transform pointer-events-auto">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-              <circle cx="12" cy="13" r="3"/>
-            </svg>
-          </div>
-        `,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-      });
-
-      const marker = L.marker([cam.latitude, cam.longitude], { icon, zIndexOffset: 60 }).addTo(camsGroupRef.current!);
-      const primaryViewId = cam.views && cam.views.length > 0 ? cam.views[0].id : '';
-      const viewLink = primaryViewId ? `https://511on.ca/map/Cctv/${primaryViewId}` : 'https://511on.ca/map/Cctv';
-
-      marker.bindPopup(`
-        <div class="p-2 space-y-2 text-xs font-mono max-w-[320px]">
-          <div class="flex items-center justify-between border-b border-indigo-500/30 pb-1">
-            <span class="font-bold text-indigo-300 text-sm">${cam.highway} CCTV</span>
-            <span class="text-[9px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40 flex items-center gap-1 font-bold">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-              LIVE SNAPSHOT
-            </span>
-          </div>
-          <div class="text-[11px] font-semibold text-white">${cam.name}</div>
-          <div class="relative rounded overflow-hidden border border-slate-700 bg-slate-900 aspect-video">
-            <img 
-              src="${cam.imageUrl}" 
-              alt="${cam.name}" 
-              class="w-full h-full object-cover filter contrast-110 brightness-95" 
-              loading="eager"
-            />
-            <div class="absolute bottom-1 right-1 text-[9px] bg-black/85 px-1.5 py-0.5 text-cyan-300 font-mono rounded">
-              MTO LIVE // 60s
-            </div>
-            ${cam.distanceKm !== undefined ? `<div class="absolute top-1 left-1 text-[9px] bg-slate-950/85 px-1.5 py-0.5 text-slate-300 font-mono rounded border border-slate-700">${cam.distanceKm} km from Listowel</div>` : ''}
-          </div>
-          <div class="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
-            <span>Direction: <strong class="text-white">${cam.direction}</strong></span>
-            ${cam.views ? `<span class="text-indigo-300 font-semibold">${cam.views.length} Angles</span>` : ''}
-          </div>
-          <a
-            href="${viewLink}"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="flex items-center justify-center gap-1.5 w-full mt-2 py-1.5 rounded bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 hover:text-white border border-indigo-500/40 text-[11px] font-bold transition-colors no-underline"
-          >
-            <span>OPEN 511 HIGH-RES STREAM ↗</span>
-          </a>
-        </div>
-      `);
-    });
-  }, [cameras, layers.cams]);
-
-  // Render Roads
-  useEffect(() => {
-    if (!roadsGroupRef.current || !mapInstanceRef.current) return;
-    roadsGroupRef.current.clearLayers();
-
-    if (!layers.roads) return;
-
-    roads.forEach((road) => {
-      const color =
-        road.status === 'CLOSED'
-          ? '#ef4444'
-          : road.status === 'SNOW_COVERED'
-          ? '#f59e0b'
-          : '#10b981';
-
-      const polyline = L.polyline(road.coords, {
-        color,
-        weight: 5,
-        opacity: 0.9,
-      }).addTo(roadsGroupRef.current!);
-
-      polyline.bindPopup(`
-        <div class="p-2 space-y-1 text-xs font-mono">
-          <div class="font-bold text-cyan-400 text-sm border-b border-cyan-500/30 pb-1">
-            ${road.highway} // ${road.segment}
-          </div>
-          <div class="text-[11px] text-slate-300">Condition: <span class="text-emerald-400 font-bold">${road.status}</span></div>
-          <div class="text-[11px] text-slate-300">Visibility: <span class="text-white">${road.visibility}</span></div>
-          <div class="text-[10px] text-slate-400">Patrol: ${road.lastUpdated}</div>
-        </div>
-      `);
-    });
-  }, [roads, layers.roads]);
-
-  // Render Outages
-  useEffect(() => {
-    if (!outagesGroupRef.current || !mapInstanceRef.current) return;
-    outagesGroupRef.current.clearLayers();
-
-    if (!layers.hydro) return;
-
-    outages.forEach((outage) => {
-      const icon = L.divIcon({
-        className: 'hydro-marker-icon',
-        html: `
-          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950/95 border-2 border-rose-500 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.5)] font-mono text-[10px] whitespace-nowrap animate-pulse pointer-events-auto">
-            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-            <span>OUTAGE: ${outage.customersAffected}</span>
-          </div>
-        `,
-        iconSize: [95, 24],
-        iconAnchor: [47, 12],
-      });
-
-      const marker = L.marker([outage.latitude, outage.longitude], { icon, zIndexOffset: 70 }).addTo(
-        outagesGroupRef.current!
-      );
-      marker.bindPopup(`
-        <div class="p-2 space-y-1 text-xs font-mono">
-          <div class="font-bold text-rose-400 text-sm border-b border-rose-500/30 pb-1">
-            HYDRO ONE OUTAGE // ${outage.location}
-          </div>
-          <div class="text-[11px] text-slate-300">Customers Affected: <span class="text-rose-300 font-bold">${outage.customersAffected}</span></div>
-          <div class="text-[11px] text-slate-300">Status: <span class="text-amber-400 font-semibold">${outage.status}</span></div>
-          <div class="text-[11px] text-slate-300">Cause: <span class="text-white">${outage.cause}</span></div>
-          <div class="text-[11px] text-slate-300">ETA: <span class="text-cyan-300">${outage.estimatedRestoration}</span></div>
-        </div>
-      `);
-    });
-  }, [outages, layers.hydro]);
-
   // Render Listowel Memorial Hospital Helipad (CPN5)
   useEffect(() => {
     if (!helipadGroupRef.current || !mapInstanceRef.current) return;
@@ -963,68 +809,6 @@ export const MapView: React.FC<MapProps> = ({
       </div>
     `);
   }, [layers.satellites, iss]);
-
-  // Render Real-Time 511 Incident & Closure Markers
-  useEffect(() => {
-    if (!incidentsGroupRef.current || !mapInstanceRef.current) return;
-    incidentsGroupRef.current.clearLayers();
-
-    if (!layers.dispatches && !layers.roads) return;
-
-    incidents.forEach((inc) => {
-      const isClosure = inc.isFullClosure || inc.eventType === 'closure';
-      const isAccident = inc.eventType === 'accident' || inc.eventType === 'hazard';
-
-      const iconHtml = `
-        <div class="relative flex items-center justify-center cursor-pointer">
-          <div class="w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-950 shadow-lg ${
-            isClosure
-              ? 'bg-rose-600 animate-pulse'
-              : isAccident
-              ? 'bg-amber-500'
-              : 'bg-cyan-600'
-          }">
-            <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-        </div>
-      `;
-
-      const customIcon = L.divIcon({
-        className: 'custom-incident-marker',
-        html: iconHtml,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
-
-      const marker = L.marker([inc.latitude, inc.longitude], { icon: customIcon });
-
-      marker.bindPopup(`
-        <div class="p-2 space-y-1.5 text-xs font-mono max-w-[280px]">
-          <div class="font-bold ${isClosure ? 'text-rose-400' : 'text-amber-400'} text-sm border-b border-slate-700 pb-1 flex items-center justify-between">
-            <span>${inc.road} (${inc.direction})</span>
-            <span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-              isClosure
-                ? 'bg-rose-950 text-rose-300 border border-rose-500'
-                : 'bg-amber-950 text-amber-300 border border-amber-500'
-            }">
-              ${isClosure ? 'FULL CLOSURE' : inc.eventType.toUpperCase()}
-            </span>
-          </div>
-          <div class="text-[11px] text-slate-200 font-sans leading-relaxed">
-            ${inc.description}
-          </div>
-          <div class="text-[10px] text-slate-400 border-t border-slate-800 pt-1 flex justify-between">
-            <span>${inc.lanesAffected}</span>
-            <span class="text-cyan-400 font-semibold">${inc.distanceKmToListowel} km out</span>
-          </div>
-        </div>
-      `);
-
-      marker.addTo(incidentsGroupRef.current!);
-    });
-  }, [incidents, layers.dispatches, layers.roads]);
 
   // Render USGS Earthquakes
   useEffect(() => {
@@ -1221,16 +1005,16 @@ export const MapView: React.FC<MapProps> = ({
             WEATHER & SQUALL
           </button>
           <button
-            onClick={() => onApplyPreset('corridors')}
-            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-amber-200 border border-slate-800 hover:border-amber-500/50 cursor-pointer transition-all whitespace-nowrap"
+            onClick={() => onApplyPreset('rivers')}
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-300 hover:text-emerald-200 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all whitespace-nowrap"
           >
-            HWY 23 / 86
+            RIVERS & FLOOD
           </button>
           <button
             onClick={() => onApplyPreset('airspace')}
-            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-300 hover:text-emerald-200 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all whitespace-nowrap"
+            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-amber-200 border border-slate-800 hover:border-amber-500/50 cursor-pointer transition-all whitespace-nowrap"
           >
-            AIRSPACE
+            AIRSPACE & SEA
           </button>
         </div>
       )}

@@ -22,8 +22,6 @@ interface HeaderHUDProps {
   onRefresh: () => void;
   isRefreshing: boolean;
   activeLayersCount: number;
-  hasApiKey: boolean;
-  onOpenKeyModal: () => void;
   criticalAlert?: string | null;
   opticMode?: OpticMode;
   onChangeOpticMode?: (mode: OpticMode) => void;
@@ -35,8 +33,6 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   onRefresh,
   isRefreshing,
   activeLayersCount,
-  hasApiKey,
-  onOpenKeyModal,
   criticalAlert,
   opticMode = 'normal',
   onChangeOpticMode,
@@ -226,21 +222,6 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
           <Clock className="w-3.5 h-3.5 text-cyan-400" />
           <span className="text-cyan-300 font-semibold">{timeLocal}</span>
         </div>
-
-        {/* 511 API Key Indicator Button */}
-        <button
-          onClick={onOpenKeyModal}
-          className={`flex items-center gap-1 px-2 py-1 rounded border font-mono text-[10px] md:text-xs transition-colors cursor-pointer min-h-[32px] ${
-            hasApiKey
-              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
-              : 'bg-amber-950/60 text-amber-300 border-amber-500/40 hover:bg-amber-900/80'
-          }`}
-          title="Ontario 511 Live CCTV Stream Key"
-        >
-          <Key className="w-3 h-3" />
-          <span className="hidden sm:inline">511:</span>
-          <span className="font-bold">{hasApiKey ? 'LIVE' : 'KEY'}</span>
-        </button>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1">
