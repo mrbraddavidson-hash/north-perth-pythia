@@ -120,7 +120,11 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): 
 // 1. Fetch live military aircraft from adsb.lol /v2/mil
 export async function fetchLiveMilitaryFlights(): Promise<MilitaryFlight[]> {
   try {
-    const res = await fetch('https://api.adsb.lol/v2/mil');
+    const isLocal =
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const url = isLocal ? 'https://api.adsb.lol/v2/mil' : '/api/adsb/mil';
+    const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
     const acList: any[] = data.ac || [];
