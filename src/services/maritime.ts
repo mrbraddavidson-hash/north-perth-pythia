@@ -26,8 +26,8 @@ export interface MaritimeVessel {
 }
 
 // Bounding box for Lake Huron, Georgian Bay, Goderich, and St. Clair waterway
-// minLat: 42.5, minLon: -83.5, maxLat: 45.8, maxLon: -80.0
-const LAKE_HURON_BBOX = '42.5,-83.5,45.8,-80.0';
+// minLon: -83.5, minLat: 42.5, maxLon: -80.0, maxLat: 45.8
+const LAKE_HURON_BBOX = '-83.5,42.5,-80.0,45.8';
 
 export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Earth's radius in km

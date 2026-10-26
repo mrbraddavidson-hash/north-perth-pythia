@@ -64,9 +64,11 @@ export async function fetchAuroraKp(): Promise<AuroraData> {
 }
 
 // 2. Fetch real-time International Space Station orbit
-export async function fetchLiveIss(): Promise<IssTelemetry> {
+export async function fetchLiveIss(): Promise<IssTelemetry | null> {
   try {
-    const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+    const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544', {
+      signal: AbortSignal.timeout(6000),
+    });
     if (!res.ok) throw new Error('Failed to fetch ISS');
     const data = await res.json();
 
@@ -87,15 +89,7 @@ export async function fetchLiveIss(): Promise<IssTelemetry> {
       isOverhead: dist < 800, // Visible within 800km horizon
     };
   } catch (err) {
-    console.warn('ISS telemetry fallback:', err);
-    return {
-      latitude: 42.1,
-      longitude: -78.4,
-      altitudeKm: 420,
-      velocityKmh: 27580,
-      distanceKmToListowel: 280,
-      visibility: 'daylight',
-      isOverhead: true,
-    };
+    console.warn('ISS telemetry unavailable:', err);
+    return null;
   }
 }
