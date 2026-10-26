@@ -99,7 +99,8 @@ export const MapView: React.FC<MapProps> = ({
   const satLabelsRef = useRef<L.TileLayer | null>(null);
   const satRoadsRef = useRef<L.TileLayer | null>(null);
   const topoBaseRef = useRef<L.TileLayer | null>(null);
-  const radarLayerRef = useRef<L.TileLayer | null>(null);
+  const radarTileLayersRef = useRef<{ [key: string]: L.TileLayer }>({});
+  const activeRadarKeyRef = useRef<string | null>(null);
   const ecccRadarLayerRef = useRef<L.TileLayer.WMS | null>(null);
   const droughtLayerRef = useRef<L.TileLayer.WMS | null>(null);
 
@@ -107,7 +108,7 @@ export const MapView: React.FC<MapProps> = ({
   const [radarEngine, setRadarEngine] = useState<'loop' | 'eccc'>('loop');
   const [radarData, setRadarData] = useState<RadarData | null>(null);
   const [radarFrameIndex, setRadarFrameIndex] = useState<number>(-1);
-  const [isPlayingRadar, setIsPlayingRadar] = useState<boolean>(false);
+  const [isPlayingRadar, setIsPlayingRadar] = useState<boolean>(true); // Auto-play by default
   const [radarColorScheme, setRadarColorScheme] = useState<number>(2); // 2: Universal Blue, 8: NEXRAD, 4: Rainbow
 
   // Layer groups
@@ -212,18 +213,7 @@ export const MapView: React.FC<MapProps> = ({
     map.on('move', updateMapCenterAndZoom);
     map.on('zoom', updateMapCenterAndZoom);
 
-    // 1. RainViewer High-Res Animated Doppler Loop (maxNativeZoom: 7 for crisp upscaling without errors)
-    const initialRadarUrl = 'https://tilecache.rainviewer.com/v2/radar/now/256/{z}/{x}/{y}/2/1_1.png';
-    const radarTile = L.tileLayer(initialRadarUrl, {
-      maxZoom: 19,
-      maxNativeZoom: 7, // CRITICAL: RainViewer free tier caps native zoom at 7; Leaflet upscales smoothly above zoom 7
-      opacity: radarOpacity,
-      zIndex: 20,
-      attribution: '© RainViewer / Exeter WSO Doppler',
-    });
-    radarLayerRef.current = radarTile;
-
-    // 2. Environment Canada GeoMet 1km High-Res Native Radar
+    // Environment Canada GeoMet 1km High-Res Native Radar
     const ecccRadar = L.tileLayer.wms('https://geo.weather.gc.ca/geomet', {
       layers: 'RADAR_1KM_RRAI',
       format: 'image/png',
@@ -235,12 +225,8 @@ export const MapView: React.FC<MapProps> = ({
     });
     ecccRadarLayerRef.current = ecccRadar;
 
-    if (layers.radar) {
-      if (radarEngine === 'loop') {
-        radarTile.addTo(map);
-      } else {
-        ecccRadar.addTo(map);
-      }
+    if (layers.radar && radarEngine === 'eccc') {
+      ecccRadar.addTo(map);
     }
 
     // Agriculture and Agri-Food Canada (AAFC) Drought Monitor WMS
@@ -338,62 +324,114 @@ export const MapView: React.FC<MapProps> = ({
     else if (opticMode === 'crt') container.classList.add('optic-crt');
   }, [opticMode]);
 
-  // Update Radar Layer Visibility, Engine & Opacity
-  useEffect(() => {
-    if (!mapInstanceRef.current || !radarLayerRef.current || !ecccRadarLayerRef.current) return;
-    const map = mapInstanceRef.current;
-    radarLayerRef.current.setOpacity(radarOpacity);
-    ecccRadarLayerRef.current.setOpacity(radarOpacity);
-
-    if (layers.radar) {
-      if (radarEngine === 'loop') {
-        if (map.hasLayer(ecccRadarLayerRef.current)) map.removeLayer(ecccRadarLayerRef.current);
-        if (!map.hasLayer(radarLayerRef.current)) radarLayerRef.current.addTo(map);
-      } else {
-        if (map.hasLayer(radarLayerRef.current)) map.removeLayer(radarLayerRef.current);
-        if (!map.hasLayer(ecccRadarLayerRef.current)) ecccRadarLayerRef.current.addTo(map);
-      }
-    } else {
-      if (map.hasLayer(radarLayerRef.current)) map.removeLayer(radarLayerRef.current);
-      if (map.hasLayer(ecccRadarLayerRef.current)) map.removeLayer(ecccRadarLayerRef.current);
-    }
-  }, [layers.radar, radarOpacity, radarEngine]);
-
-  // Fetch live radar metadata on mount & 3-minute poll
+  // Fetch live radar metadata on mount & 2-minute poll
   useEffect(() => {
     let mounted = true;
     const loadRadar = async () => {
       const data = await fetchLiveRadarData();
       if (!mounted || !data || data.frames.length === 0) return;
       setRadarData(data);
-      setRadarFrameIndex(data.frames.length - 1);
+      setRadarFrameIndex((prev) => (prev < 0 ? 0 : Math.min(prev, data.frames.length - 1)));
     };
     loadRadar();
-    const interval = setInterval(loadRadar, 180000);
+    const interval = setInterval(loadRadar, 120000);
     return () => {
       mounted = false;
       clearInterval(interval);
     };
   }, []);
 
-  // Update radar tile URL when frame index or color scheme changes
+  // Synchronize and pre-buffer RainViewer radar tile layers using layer opacity switching
   useEffect(() => {
-    if (!radarLayerRef.current || !radarData || radarFrameIndex < 0) return;
-    const frame = radarData.frames[radarFrameIndex];
-    if (frame) {
-      const url = getRadarTileUrl(radarData.host, frame.path, radarColorScheme);
-      radarLayerRef.current.setUrl(url);
-    }
-  }, [radarFrameIndex, radarColorScheme, radarData]);
+    if (!mapInstanceRef.current || !radarData) return;
+    const map = mapInstanceRef.current;
+    const isLoopActive = layers.radar && radarEngine === 'loop';
 
-  // Handle radar playback loop
+    // 1. Maintain pre-buffered tile layer instances for each frame
+    const currentSchemeKeys: string[] = [];
+    radarData.frames.forEach((frame) => {
+      const key = `${frame.path}_${radarColorScheme}`;
+      currentSchemeKeys.push(key);
+
+      if (!radarTileLayersRef.current[key]) {
+        const layer = L.tileLayer(getRadarTileUrl(radarData.host, frame.path, radarColorScheme), {
+          maxZoom: 19,
+          maxNativeZoom: 7, // RainViewer free tier caps native zoom at 7; Leaflet smoothly upscales
+          opacity: 0,
+          zIndex: 20,
+          attribution: '© RainViewer / Exeter WSO Doppler',
+        });
+        radarTileLayersRef.current[key] = layer;
+      }
+
+      const layer = radarTileLayersRef.current[key];
+      if (isLoopActive) {
+        if (!map.hasLayer(layer)) {
+          layer.addTo(map);
+        }
+      } else {
+        if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      }
+    });
+
+    // 2. Clean up retired frame layers
+    const activeKeySet = new Set(currentSchemeKeys);
+    Object.keys(radarTileLayersRef.current).forEach((key) => {
+      if (!activeKeySet.has(key)) {
+        const oldLayer = radarTileLayersRef.current[key];
+        if (map.hasLayer(oldLayer)) {
+          map.removeLayer(oldLayer);
+        }
+        delete radarTileLayersRef.current[key];
+      }
+    });
+
+    // 3. ECCC 1km native WMS radar synchronization
+    if (ecccRadarLayerRef.current) {
+      ecccRadarLayerRef.current.setOpacity(radarOpacity);
+      if (layers.radar && radarEngine === 'eccc') {
+        if (!map.hasLayer(ecccRadarLayerRef.current)) {
+          ecccRadarLayerRef.current.addTo(map);
+        }
+      } else {
+        if (map.hasLayer(ecccRadarLayerRef.current)) {
+          map.removeLayer(ecccRadarLayerRef.current);
+        }
+      }
+    }
+
+    // 4. Update opacity for the active frame in loop mode (0ms latency, zero flickering)
+    if (isLoopActive && radarFrameIndex >= 0 && radarFrameIndex < radarData.frames.length) {
+      const activeFrame = radarData.frames[radarFrameIndex];
+      const activeKey = `${activeFrame.path}_${radarColorScheme}`;
+
+      currentSchemeKeys.forEach((key) => {
+        const layer = radarTileLayersRef.current[key];
+        if (layer) {
+          if (key === activeKey) {
+            layer.setOpacity(radarOpacity);
+          } else {
+            layer.setOpacity(0);
+          }
+        }
+      });
+      activeRadarKeyRef.current = activeKey;
+    }
+  }, [radarData, radarFrameIndex, radarColorScheme, radarOpacity, layers.radar, radarEngine]);
+
+  // Handle radar playback loop with dwell on latest live frame
   useEffect(() => {
-    if (!isPlayingRadar || !radarData || radarData.frames.length <= 1) return;
-    const interval = setInterval(() => {
+    if (!isPlayingRadar || !radarData || radarData.frames.length <= 1 || !layers.radar || radarEngine !== 'loop') return;
+    const isLastFrame = radarFrameIndex >= radarData.frames.length - 1;
+    // 550ms between past frames; 1400ms dwell on the latest live frame before repeating
+    const delay = isLastFrame ? 1400 : 550;
+    const timeout = setTimeout(() => {
       setRadarFrameIndex((prev) => (prev + 1) % radarData.frames.length);
-    }, 700);
-    return () => clearInterval(interval);
-  }, [isPlayingRadar, radarData]);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [isPlayingRadar, radarData, radarFrameIndex, layers.radar, radarEngine]);
 
   // Update AAFC Drought Monitor Layer Visibility
   useEffect(() => {
@@ -1125,7 +1163,7 @@ export const MapView: React.FC<MapProps> = ({
                 {radarEngine === 'loop' ? 'EXETER COMPOSITE LOOP' : 'ECCC 1KM NATIVE RADAR'}
               </span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <div className="flex items-center bg-black/60 rounded border border-slate-800 p-0.5">
                 <button
                   onClick={() => setRadarEngine('loop')}
@@ -1148,10 +1186,28 @@ export const MapView: React.FC<MapProps> = ({
                   ECCC 1KM
                 </button>
               </div>
+
+              {radarEngine === 'loop' && (
+                <span
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                    isPlayingRadar
+                      ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-amber-950/60 text-amber-300 border border-amber-500/40'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isPlayingRadar ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                    }`}
+                  />
+                  {isPlayingRadar ? 'LOOPING' : 'PAUSED'}
+                </span>
+              )}
+
               <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30">
                 {radarEngine === 'loop'
                   ? radarFrameIndex >= 0 && radarData.frames[radarFrameIndex]
-                    ? radarData.frames[radarFrameIndex].formattedTime
+                    ? `${radarData.frames[radarFrameIndex].formattedTime} (${radarFrameIndex + 1}/${radarData.frames.length})`
                     : 'LIVE'
                   : 'NATIVE ECCC'}
               </span>
@@ -1246,7 +1302,22 @@ export const MapView: React.FC<MapProps> = ({
                 RAINBOW
               </button>
             </div>
-            <span className="text-slate-500">{radarData.frames.length} FRAMES // 10M RES</span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => mapInstanceRef.current?.flyTo([44.5, -80.5], 7, { duration: 1.2 })}
+                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400 cursor-pointer text-[9px]"
+                title="Zoom out to Ontario regional weather systems"
+              >
+                REGIONAL VIEW
+              </button>
+              <button
+                onClick={() => mapInstanceRef.current?.flyTo(NORTH_PERTH_COORDS, 11, { duration: 1.2 })}
+                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 cursor-pointer text-[9px]"
+                title="Focus on North Perth / Listowel HQ"
+              >
+                LISTOWEL HQ
+              </button>
+            </div>
           </div>
         </div>
       )}
