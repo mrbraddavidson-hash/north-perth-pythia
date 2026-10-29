@@ -26,6 +26,21 @@ export interface RiverGaugeData {
   trend: 'RISING' | 'FALLING' | 'STABLE';
 }
 
+export interface DailyForecast {
+  date: string;
+  weatherCode: number;
+  conditionLabel: string;
+  tempMaxC: number;
+  tempMinC: number;
+}
+
+export interface HourlyForecastItem {
+  time: string;
+  tempC: number;
+  precipProb: number;
+  weatherCode: number;
+}
+
 export interface WeatherTelemetry {
   temperatureC: number;
   apparentTempC: number;
@@ -37,6 +52,8 @@ export interface WeatherTelemetry {
   conditionLabel: string;
   barometricPressureHpa: number;
   cloudCoverPercent: number;
+  dailyForecast?: DailyForecast[];
+  hourlyForecast?: HourlyForecastItem[];
 }
 
 export interface CameraViewItem {

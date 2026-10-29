@@ -2,6 +2,8 @@ import {
   FlightData,
   RiverGaugeData,
   WeatherTelemetry,
+  DailyForecast,
+  HourlyForecastItem,
   TrafficCamera,
   RoadCondition,
   HydroOutage,
@@ -332,11 +334,43 @@ export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
 
   try {
     const url =
-      'https://api.open-meteo.com/v1/forecast?latitude=43.73&longitude=-80.95&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover&timezone=America%2FToronto';
+      'https://api.open-meteo.com/v1/forecast?latitude=43.73&longitude=-80.95&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=America%2FToronto&forecast_days=3';
     const res = await fetch(url);
     if (!res.ok) throw new Error('Weather API error');
     const data = await res.json();
     const curr = data.current;
+
+    // Parse daily 3-day forecast
+    const dailyForecast: DailyForecast[] = [];
+    if (data.daily && Array.isArray(data.daily.time)) {
+      data.daily.time.forEach((dateStr: string, idx: number) => {
+        dailyForecast.push({
+          date: dateStr,
+          weatherCode: data.daily.weather_code[idx] ?? 0,
+          conditionLabel: getWeatherConditionLabel(data.daily.weather_code[idx] ?? 0),
+          tempMaxC: Math.round(data.daily.temperature_2m_max[idx] * 10) / 10,
+          tempMinC: Math.round(data.daily.temperature_2m_min[idx] * 10) / 10,
+        });
+      });
+    }
+
+    // Parse next 12 hours from hourly
+    const hourlyForecast: HourlyForecastItem[] = [];
+    if (data.hourly && Array.isArray(data.hourly.time)) {
+      const nowIso = new Date().toISOString().substring(0, 13);
+      const startIndex = data.hourly.time.findIndex((t: string) => t.startsWith(nowIso));
+      const fromIdx = startIndex >= 0 ? startIndex : 0;
+      for (let i = fromIdx; i < Math.min(fromIdx + 12, data.hourly.time.length); i++) {
+        const timeStr = data.hourly.time[i];
+        const hour = timeStr.split('T')[1]?.substring(0, 5) || timeStr;
+        hourlyForecast.push({
+          time: hour,
+          tempC: Math.round(data.hourly.temperature_2m[i] * 10) / 10,
+          precipProb: data.hourly.precipitation_probability ? data.hourly.precipitation_probability[i] ?? 0 : 0,
+          weatherCode: data.hourly.weather_code ? data.hourly.weather_code[i] ?? 0 : 0,
+        });
+      }
+    }
 
     const result: WeatherTelemetry = {
       temperatureC: Math.round(curr.temperature_2m * 10) / 10,
@@ -349,22 +383,24 @@ export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
       conditionLabel: getWeatherConditionLabel(curr.weather_code),
       barometricPressureHpa: Math.round(curr.surface_pressure),
       cloudCoverPercent: curr.cloud_cover ?? 45,
+      dailyForecast,
+      hourlyForecast,
     };
     setCached('weather-telemetry', result, 2 * 60 * 1000);
     return result;
   } catch (err) {
     console.warn('Weather fallback:', err);
     return {
-      temperatureC: 16.3,
-      apparentTempC: 13.6,
-      humidityPercent: 54,
-      windSpeedKmh: 14,
-      windDirectionDeg: 10,
-      windGustsKmh: 18,
-      weatherCode: 1,
-      conditionLabel: 'Mainly Clear / High Barometer',
-      barometricPressureHpa: 1018,
-      cloudCoverPercent: 20,
+      temperatureC: 19.3,
+      apparentTempC: 15.2,
+      humidityPercent: 53,
+      windSpeedKmh: 27,
+      windDirectionDeg: 228,
+      windGustsKmh: 54,
+      weatherCode: 0,
+      conditionLabel: 'Clear Skies',
+      barometricPressureHpa: 971,
+      cloudCoverPercent: 0,
     };
   }
 }

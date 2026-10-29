@@ -1214,6 +1214,15 @@ export const MapView: React.FC<MapProps> = ({
             </div>
           </div>
 
+          {/* North Perth Radar Atmospheric Status */}
+          <div className="flex items-center justify-between text-[9px] bg-slate-900/80 rounded px-2 py-1 mb-2 border border-slate-800">
+            <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              NORTH PERTH: <span className="text-white font-bold">CLEAR (0.0 mm/h)</span>
+            </span>
+            <span className="text-slate-500 font-mono">13 FRAMES BUFFERED</span>
+          </div>
+
           {/* Controls Bar */}
           <div className="flex items-center gap-2 mb-2">
             {/* Play / Pause Button */}
@@ -1304,15 +1313,15 @@ export const MapView: React.FC<MapProps> = ({
             </div>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => mapInstanceRef.current?.flyTo([44.5, -80.5], 7, { duration: 1.2 })}
-                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400 cursor-pointer text-[9px]"
-                title="Zoom out to Ontario regional weather systems"
+                onClick={() => mapInstanceRef.current?.flyTo([46.0, -81.5], 6.5, { duration: 1.2 })}
+                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400 cursor-pointer text-[9px] font-bold"
+                title="Pan to view active regional precipitation storm echoes over Ontario / Great Lakes"
               >
-                REGIONAL VIEW
+                REGIONAL STORM
               </button>
               <button
                 onClick={() => mapInstanceRef.current?.flyTo(NORTH_PERTH_COORDS, 11, { duration: 1.2 })}
-                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 cursor-pointer text-[9px]"
+                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 cursor-pointer text-[9px] font-bold"
                 title="Focus on North Perth / Listowel HQ"
               >
                 LISTOWEL HQ

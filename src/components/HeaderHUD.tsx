@@ -13,6 +13,7 @@ import {
   Tv,
   AlertTriangle,
   Eye,
+  CloudSun,
 } from 'lucide-react';
 import { WeatherTelemetry, OpticMode } from '../services/types';
 
@@ -153,12 +154,21 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
       <div className="flex items-center gap-1.5 md:gap-3 font-mono text-xs flex-shrink-0">
         {/* Weather on Desktop & Mobile */}
         {weather && (
-          <div className="flex items-center gap-2 px-2 py-1 rounded bg-slate-900/80 border border-slate-800 text-slate-300 text-[11px]">
+          <div className="flex items-center gap-1.5 sm:gap-2 px-2 py-1 rounded bg-slate-900/80 border border-slate-800 text-slate-300 text-[11px]">
+            <CloudSun className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
             <span className="text-cyan-300 font-bold">{weather.temperatureC}°C</span>
+            <span className="text-[10px] text-slate-300 hidden sm:inline border-l border-slate-800 pl-1.5 font-medium">
+              {weather.conditionLabel}
+            </span>
             <div className="hidden xl:flex items-center gap-2 text-slate-400 border-l border-slate-800 pl-2">
-              <span className="text-[10px] text-slate-500">{weather.conditionLabel}</span>
-              <span className="flex items-center gap-0.5"><Wind className="w-3 h-3 text-slate-500" />{weather.windSpeedKmh}km/h</span>
-              <span className="flex items-center gap-0.5"><Gauge className="w-3 h-3 text-slate-500" />{weather.barometricPressureHpa}hPa</span>
+              <span className="flex items-center gap-0.5">
+                <Wind className="w-3 h-3 text-slate-500" />
+                {weather.windSpeedKmh}km/h
+              </span>
+              <span className="flex items-center gap-0.5">
+                <Gauge className="w-3 h-3 text-slate-500" />
+                {weather.barometricPressureHpa}hPa
+              </span>
             </div>
           </div>
         )}

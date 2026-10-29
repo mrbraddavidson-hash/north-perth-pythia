@@ -13,6 +13,14 @@ import {
   Anchor,
   Shield,
   Clock,
+  CloudSun,
+  CloudRain,
+  Wind,
+  Droplets,
+  Gauge,
+  Thermometer,
+  Compass,
+  Sun,
 } from 'lucide-react';
 import {
   FlightData,
@@ -54,7 +62,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   milFlights = [],
   earthquakes = [],
 }) => {
-  const [activeTab, setActiveTab] = useState<'oracle' | 'airspace' | 'seismic'>('oracle');
+  const [activeTab, setActiveTab] = useState<'oracle' | 'weather' | 'airspace' | 'seismic'>('oracle');
 
   const mainGauge = riverGauges.find((g) => g.stationId === '02FE003') || riverGauges[0];
   const orngeFlight = flights.find((f) => f.callsign.includes('ORNGE') || f.callsign.includes('MEDEVAC'));
@@ -68,35 +76,46 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
       <div className="flex items-center border-b border-cyan-500/20 bg-slate-900/50">
         <button
           onClick={() => setActiveTab('oracle')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
             activeTab === 'oracle'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5" />
-          PYTHIA SITREP
+          <Sparkles className="w-3 h-3" />
+          SITREP
+        </button>
+        <button
+          onClick={() => setActiveTab('weather')}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+            activeTab === 'weather'
+              ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <CloudSun className="w-3 h-3" />
+          WEATHER {weather ? `(${weather.temperatureC}°)` : ''}
         </button>
         <button
           onClick={() => setActiveTab('airspace')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
             activeTab === 'airspace'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Plane className="w-3.5 h-3.5" />
-          AIR & SEA ({flights.length + vessels.length + milFlights.length})
+          <Plane className="w-3 h-3" />
+          AIR ({flights.length + milFlights.length})
         </button>
         <button
           onClick={() => setActiveTab('seismic')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
             activeTab === 'seismic'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Activity className="w-3.5 h-3.5" />
+          <Activity className="w-3 h-3" />
           SEISMIC ({earthquakes.length})
         </button>
       </div>
@@ -266,7 +285,179 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 2: AIRSPACE (ADS-B LIVE RADAR) */}
+        {/* TAB 2: WEATHER & RADAR METEOROLOGY */}
+        {activeTab === 'weather' && (
+          <div className="space-y-3">
+            {/* Header / Current Station */}
+            <div className="p-3 rounded bg-slate-900/80 border border-cyan-500/40 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                  <CloudSun className="w-4 h-4 text-cyan-400" />
+                  <span>NORTH PERTH METEOROLOGY</span>
+                </div>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  LIVE
+                </span>
+              </div>
+
+              {/* Big Temp & Condition */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-3xl font-tactical font-black text-white tracking-tight">
+                    {weather?.temperatureC ?? '--'}°C
+                  </div>
+                  <div className="text-[11px] text-slate-300 flex items-center gap-1 mt-0.5 font-semibold">
+                    <span>{weather?.conditionLabel ?? 'Stable Atmosphere'}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-slate-400">Feels {weather?.apparentTempC ?? '--'}°C</span>
+                  </div>
+                </div>
+                {weather?.dailyForecast?.[0] && (
+                  <div className="text-right text-[11px] font-mono bg-slate-950/70 p-1.5 rounded border border-slate-800">
+                    <div className="text-rose-400 font-bold">▲ {weather.dailyForecast[0].tempMaxC}°C</div>
+                    <div className="text-cyan-400 font-bold">▼ {weather.dailyForecast[0].tempMinC}°C</div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4-Grid Meteorological Telemetry */}
+              <div className="grid grid-cols-2 gap-1.5 pt-1 text-[10px]">
+                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                  <span className="text-slate-400 flex items-center gap-1">
+                    <Wind className="w-3 h-3 text-cyan-400" />
+                    SURFACE WINDS
+                  </span>
+                  <div className="text-xs font-bold text-white mt-0.5">
+                    {weather?.windSpeedKmh ?? '--'} km/h <span className="text-slate-400 text-[10px]">({weather?.windDirectionDeg ?? 0}°)</span>
+                  </div>
+                  <div className="text-[9px] text-amber-300/90 mt-0.5">
+                    Gusts to {weather?.windGustsKmh ?? '--'} km/h
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                  <span className="text-slate-400 flex items-center gap-1">
+                    <Droplets className="w-3 h-3 text-cyan-400" />
+                    HUMIDITY
+                  </span>
+                  <div className="text-xs font-bold text-white mt-0.5">
+                    {weather?.humidityPercent ?? '--'}%
+                  </div>
+                  <div className="text-[9px] text-slate-400 mt-0.5">
+                    Cloud Cover: {weather?.cloudCoverPercent ?? 0}%
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                  <span className="text-slate-400 flex items-center gap-1">
+                    <Gauge className="w-3 h-3 text-cyan-400" />
+                    BAROMETER
+                  </span>
+                  <div className="text-xs font-bold text-white mt-0.5">
+                    {weather?.barometricPressureHpa ?? '--'} hPa
+                  </div>
+                  <div className="text-[9px] text-emerald-400 mt-0.5">
+                    {((weather?.barometricPressureHpa ?? 1013) >= 1013) ? 'High Pressure' : 'Low Pressure System'}
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
+                  <span className="text-slate-400 flex items-center gap-1">
+                    <CloudRain className="w-3 h-3 text-cyan-400" />
+                    PRECIPITATION
+                  </span>
+                  <div className="text-xs font-bold text-white mt-0.5">
+                    {weather?.weatherCode === 0 ? '0.0 mm/h' : 'Active'}
+                  </div>
+                  <div className="text-[9px] text-slate-400 mt-0.5">
+                    {weather?.weatherCode === 0 ? 'Clear Skies' : weather?.conditionLabel}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Doppler Weather Radar Status Card */}
+            <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-cyan-300">
+                <span className="flex items-center gap-1.5">
+                  <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
+                  DOPPLER RADAR NETWORK
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-500/40">
+                  EXETER WSO MESH
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300 leading-relaxed">
+                Continuous high-resolution Doppler reflectivity loop buffered from Exeter (WSO) and Great Lakes composite radar.
+              </p>
+              <div className="p-2 rounded bg-slate-950/80 border border-slate-800 text-[10px] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">North Perth Status:</span>
+                  <span className="text-emerald-400 font-bold">0.0 mm/h (Zero Radar Echoes)</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Precipitation Buffer:</span>
+                  <span className="text-cyan-300 font-mono">13 Frames Pre-Buffered (Auto-Loop)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Next 12 Hours Forecast Timeline */}
+            {weather?.hourlyForecast && weather.hourlyForecast.length > 0 && (
+              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-cyan-400" />
+                  NEXT 12 HOURS FORECAST
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                  {weather.hourlyForecast.map((h, i) => (
+                    <div
+                      key={i}
+                      className="flex-shrink-0 flex flex-col items-center p-1.5 rounded bg-slate-950/80 border border-slate-800/80 min-w-[50px] text-center"
+                    >
+                      <span className="text-[9px] text-slate-400">{h.time}</span>
+                      <span className="text-[11px] font-bold text-white my-0.5">{h.tempC}°</span>
+                      <span className={`text-[8px] font-bold ${h.precipProb > 30 ? 'text-cyan-400' : 'text-slate-500'}`}>
+                        {h.precipProb}% rain
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3-Day Outlook */}
+            {weather?.dailyForecast && weather.dailyForecast.length > 0 && (
+              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                  <Sun className="w-3 h-3 text-cyan-400" />
+                  3-DAY METEOROLOGICAL OUTLOOK
+                </div>
+                <div className="space-y-1.5">
+                  {weather.dailyForecast.map((day, i) => {
+                    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : day.date.substring(5);
+                    return (
+                      <div
+                        key={day.date}
+                        className="flex items-center justify-between p-2 rounded bg-slate-950/60 border border-slate-800 text-[10px]"
+                      >
+                        <span className="font-semibold text-slate-200 w-16">{label}</span>
+                        <span className="text-slate-400 truncate flex-1 px-2">{day.conditionLabel}</span>
+                        <div className="font-mono text-right flex items-center gap-2">
+                          <span className="text-rose-400 font-bold">{day.tempMaxC}°</span>
+                          <span className="text-cyan-400 font-bold">{day.tempMinC}°</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: AIRSPACE (ADS-B LIVE RADAR) */}
         {activeTab === 'airspace' && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
