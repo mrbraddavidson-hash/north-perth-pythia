@@ -14,6 +14,7 @@ import {
   Sprout,
   Ship,
   Shield,
+  X,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -25,6 +26,7 @@ interface LayerControlPanelProps {
   flightCount: number;
   vesselCount?: number;
   milFlightCount?: number;
+  onClose?: () => void;
 }
 
 export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
@@ -35,6 +37,7 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
   flightCount,
   vesselCount = 0,
   milFlightCount = 0,
+  onClose,
 }) => {
   const layerItems: {
     key: keyof ActiveLayers;
@@ -135,18 +138,29 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
   ];
 
   return (
-    <aside className="w-80 flex-shrink-0 flex flex-col bg-slate-950/90 border-r border-cyan-500/20 backdrop-blur-md overflow-hidden z-20">
+    <aside className="w-72 sm:w-80 flex-shrink-0 flex flex-col bg-slate-950/95 border-r border-cyan-500/20 backdrop-blur-md overflow-hidden z-20 shadow-2xl">
       {/* Panel Title */}
-      <div className="flex items-center justify-between p-3 border-b border-cyan-500/20 bg-slate-900/50">
+      <div className="flex items-center justify-between p-2.5 sm:p-3 border-b border-cyan-500/20 bg-slate-900/60">
         <div className="flex items-center gap-2">
           <Layers className="w-4 h-4 text-cyan-400" />
           <h2 className="font-tactical text-xs tracking-wider font-semibold text-slate-200">
-            INTELLIGENCE LAYERS
+            LAYERS
           </h2>
         </div>
-        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
-          PYTHIA V1.2
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+            PYTHIA
+          </span>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer transition-colors"
+              title="Hide Layers (Full Map View)"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Layer List */}

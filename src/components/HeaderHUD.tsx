@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Eye,
   CloudSun,
+  Layers,
+  Map as MapIcon,
 } from 'lucide-react';
 import { WeatherTelemetry, OpticMode } from '../services/types';
 
@@ -26,6 +28,12 @@ interface HeaderHUDProps {
   criticalAlert?: string | null;
   opticMode?: OpticMode;
   onChangeOpticMode?: (mode: OpticMode) => void;
+  isLeftPanelOpen?: boolean;
+  onToggleLeftPanel?: () => void;
+  isRightPanelOpen?: boolean;
+  onToggleRightPanel?: (tab?: 'oracle' | 'weather' | 'airspace' | 'seismic') => void;
+  rightPanelTab?: 'oracle' | 'weather' | 'airspace' | 'seismic';
+  onCollapseAllPanels?: () => void;
 }
 
 export const HeaderHUD: React.FC<HeaderHUDProps> = ({
@@ -37,6 +45,12 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   criticalAlert,
   opticMode = 'normal',
   onChangeOpticMode,
+  isLeftPanelOpen = false,
+  onToggleLeftPanel,
+  isRightPanelOpen = false,
+  onToggleRightPanel,
+  rightPanelTab = 'weather',
+  onCollapseAllPanels,
 }) => {
   const [timeUtc, setTimeUtc] = useState<string>('');
   const [timeLocal, setTimeLocal] = useState<string>('');
@@ -152,10 +166,24 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
 
       {/* Right Controls & Telemetry */}
       <div className="flex items-center gap-1.5 md:gap-3 font-mono text-xs flex-shrink-0">
-        {/* Weather on Desktop & Mobile */}
+        {/* Weather on Desktop & Mobile (Interactive - Toggles Weather Telemetry Panel) */}
         {weather && (
-          <div className="flex items-center gap-1.5 sm:gap-2 px-2 py-1 rounded bg-slate-900/80 border border-slate-800 text-slate-300 text-[11px]">
-            <CloudSun className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+          <button
+            onClick={() => {
+              if (isRightPanelOpen && rightPanelTab === 'weather') {
+                onToggleRightPanel?.();
+              } else {
+                onToggleRightPanel?.('weather');
+              }
+            }}
+            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded border text-[11px] cursor-pointer transition-all active:scale-95 ${
+              isRightPanelOpen && rightPanelTab === 'weather'
+                ? 'bg-cyan-950 border-cyan-400 text-white shadow-[0_0_10px_rgba(0,242,254,0.3)]'
+                : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 hover:border-cyan-500/50 text-slate-300'
+            }`}
+            title="Toggle Live North Perth Weather & 3-Day Forecast Panel"
+          >
+            <CloudSun className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 animate-pulse" />
             <span className="text-cyan-300 font-bold">{weather.temperatureC}°C</span>
             <span className="text-[10px] text-slate-300 hidden sm:inline border-l border-slate-800 pl-1.5 font-medium">
               {weather.conditionLabel}
@@ -170,8 +198,51 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
                 {weather.barometricPressureHpa}hPa
               </span>
             </div>
-          </div>
+            <span className="text-[9px] text-cyan-400 font-bold hidden md:inline ml-0.5">
+              {isRightPanelOpen && rightPanelTab === 'weather' ? '▼' : '▲'}
+            </span>
+          </button>
         )}
+
+        {/* Desktop Interface Layout Toggles (Layers, Sitrep, Full Map) */}
+        <div className="hidden lg:flex items-center gap-1 bg-black/60 p-0.5 rounded border border-slate-800 text-[10px]">
+          <button
+            onClick={onToggleLeftPanel}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors font-semibold cursor-pointer ${
+              isLeftPanelOpen
+                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_8px_#00f2fe]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+            title={isLeftPanelOpen ? 'Hide Layers Sidebar' : 'Show Layers Sidebar'}
+          >
+            <Layers className="w-3 h-3" />
+            <span>LAYERS</span>
+          </button>
+
+          <button
+            onClick={() => onToggleRightPanel?.('oracle')}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors font-semibold cursor-pointer ${
+              isRightPanelOpen && rightPanelTab !== 'weather'
+                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_8px_#00f2fe]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+            title={isRightPanelOpen ? 'Hide Intel Sidebar' : 'Show Intel & Airspace Sidebar'}
+          >
+            <Activity className="w-3 h-3" />
+            <span>SITREP</span>
+          </button>
+
+          {(isLeftPanelOpen || isRightPanelOpen) && onCollapseAllPanels && (
+            <button
+              onClick={onCollapseAllPanels}
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 transition-colors font-bold cursor-pointer"
+              title="Collapse all side panels for 100% full map view"
+            >
+              <MapIcon className="w-3 h-3" />
+              <span>FULL MAP</span>
+            </button>
+          )}
+        </div>
 
         {/* God's Eye Sensor Shader Optics (bilawalsidhu/gods-eye-view) */}
         {onChangeOpticMode && (

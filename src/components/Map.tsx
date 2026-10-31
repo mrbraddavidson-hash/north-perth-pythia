@@ -42,6 +42,8 @@ import {
   Unlock,
   X,
   Shield,
+  Minimize2,
+  Maximize2,
 } from 'lucide-react';
 import {
   MilitaryFlight,
@@ -110,6 +112,7 @@ export const MapView: React.FC<MapProps> = ({
   const [radarFrameIndex, setRadarFrameIndex] = useState<number>(-1);
   const [isPlayingRadar, setIsPlayingRadar] = useState<boolean>(true); // Auto-play by default
   const [radarColorScheme, setRadarColorScheme] = useState<number>(2); // 2: Universal Blue, 8: NEXRAD, 4: Rainbow
+  const [isRadarMinimized, setIsRadarMinimized] = useState<boolean>(true); // Compact by default to maximize map view
 
   // Layer groups
   const townsGroupRef = useRef<L.LayerGroup | null>(null);
@@ -1153,181 +1156,232 @@ export const MapView: React.FC<MapProps> = ({
 
       {/* Live Weather Radar Player HUD (Visible when Radar Layer is Active) */}
       {layers.radar && radarData && radarData.frames.length > 0 && (
-        <div className="absolute bottom-16 sm:bottom-20 left-3 right-3 sm:right-auto sm:left-5 z-20 bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2.5 font-mono shadow-[0_0_25px_rgba(0,242,254,0.15)] backdrop-blur-md max-w-sm sm:max-w-md">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-[11px] font-tactical font-bold text-white tracking-wider">
-                {radarEngine === 'loop' ? 'EXETER COMPOSITE LOOP' : 'ECCC 1KM NATIVE RADAR'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center bg-black/60 rounded border border-slate-800 p-0.5">
+        <div className={`absolute bottom-14 sm:bottom-16 left-3 right-3 sm:right-auto sm:left-5 z-20 bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2 font-mono shadow-[0_0_25px_rgba(0,242,254,0.15)] backdrop-blur-md transition-all ${
+          isRadarMinimized ? 'max-w-xs' : 'max-w-sm sm:max-w-md p-2.5'
+        }`}>
+          {isRadarMinimized ? (
+            /* Compact / Minimized Single-Row Mode */
+            <div className="flex items-center justify-between gap-2 text-[10px]">
+              <div className="flex items-center gap-1.5 font-bold text-white">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-[10px] tracking-wider text-cyan-200">
+                  {radarEngine === 'loop' ? 'RADAR' : 'ECCC'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => setRadarEngine('loop')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
-                    radarEngine === 'loop'
-                      ? 'bg-cyan-500 text-black'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  onClick={() => setIsPlayingRadar(!isPlayingRadar)}
+                  className="flex items-center justify-center w-5 h-5 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition-all shadow-[0_0_8px_#00f2fe] cursor-pointer"
+                  title={isPlayingRadar ? 'Pause Radar Loop' : 'Play Radar Loop'}
                 >
-                  LOOP
+                  {isPlayingRadar ? (
+                    <Pause className="w-2.5 h-2.5 fill-current" />
+                  ) : (
+                    <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
+                  )}
                 </button>
+                <span className="text-[9px] font-bold text-cyan-300 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                  {radarFrameIndex >= 0 && radarData.frames[radarFrameIndex]
+                    ? radarData.frames[radarFrameIndex].formattedTime
+                    : 'LIVE'}
+                </span>
                 <button
-                  onClick={() => setRadarEngine('eccc')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
-                    radarEngine === 'eccc'
-                      ? 'bg-cyan-500 text-black'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  onClick={() => setIsRadarMinimized(false)}
+                  className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer ml-0.5"
+                  title="Expand Radar Loop Controls & Storm View"
                 >
-                  ECCC 1KM
+                  <Maximize2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Full Expanded Mode */
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="text-[11px] font-tactical font-bold text-white tracking-wider">
+                    {radarEngine === 'loop' ? 'EXETER COMPOSITE LOOP' : 'ECCC 1KM NATIVE RADAR'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center bg-black/60 rounded border border-slate-800 p-0.5">
+                    <button
+                      onClick={() => setRadarEngine('loop')}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
+                        radarEngine === 'loop'
+                          ? 'bg-cyan-500 text-black'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      LOOP
+                    </button>
+                    <button
+                      onClick={() => setRadarEngine('eccc')}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
+                        radarEngine === 'eccc'
+                          ? 'bg-cyan-500 text-black'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ECCC 1KM
+                    </button>
+                  </div>
+
+                  {radarEngine === 'loop' && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        isPlayingRadar
+                          ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-amber-950/60 text-amber-300 border border-amber-500/40'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isPlayingRadar ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                        }`}
+                      />
+                      {isPlayingRadar ? 'LOOPING' : 'PAUSED'}
+                    </span>
+                  )}
+
+                  <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                    {radarEngine === 'loop'
+                      ? radarFrameIndex >= 0 && radarData.frames[radarFrameIndex]
+                        ? `${radarData.frames[radarFrameIndex].formattedTime} (${radarFrameIndex + 1}/${radarData.frames.length})`
+                        : 'LIVE'
+                      : 'NATIVE ECCC'}
+                  </span>
+
+                  <button
+                    onClick={() => setIsRadarMinimized(true)}
+                    className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer ml-0.5"
+                    title="Minimize Radar HUD to compact bar"
+                  >
+                    <Minimize2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* North Perth Radar Atmospheric Status */}
+              <div className="flex items-center justify-between text-[9px] bg-slate-900/80 rounded px-2 py-1 mb-2 border border-slate-800">
+                <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  NORTH PERTH: <span className="text-white font-bold">CLEAR (0.0 mm/h)</span>
+                </span>
+                <span className="text-slate-500 font-mono">13 FRAMES BUFFERED</span>
+              </div>
+
+              {/* Controls Bar */}
+              <div className="flex items-center gap-2 mb-2">
+                {/* Play / Pause Button */}
+                <button
+                  onClick={() => setIsPlayingRadar(!isPlayingRadar)}
+                  className="flex items-center justify-center w-7 h-7 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition-all shadow-[0_0_10px_#00f2fe] cursor-pointer flex-shrink-0"
+                  title={isPlayingRadar ? 'Pause' : 'Play Loop'}
+                >
+                  {isPlayingRadar ? (
+                    <Pause className="w-3.5 h-3.5 fill-current" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                  )}
+                </button>
+
+                {/* Step Back */}
+                <button
+                  onClick={() => {
+                    setIsPlayingRadar(false);
+                    setRadarFrameIndex((prev) => (prev > 0 ? prev - 1 : radarData.frames.length - 1));
+                  }}
+                  className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 cursor-pointer"
+                  title="Previous Frame"
+                >
+                  <SkipBack className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Frame Scrubber */}
+                <input
+                  type="range"
+                  min={0}
+                  max={radarData.frames.length - 1}
+                  value={radarFrameIndex >= 0 ? radarFrameIndex : radarData.frames.length - 1}
+                  onChange={(e) => {
+                    setIsPlayingRadar(false);
+                    setRadarFrameIndex(parseInt(e.target.value));
+                  }}
+                  className="flex-1 accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+                />
+
+                {/* Step Forward */}
+                <button
+                  onClick={() => {
+                    setIsPlayingRadar(false);
+                    setRadarFrameIndex((prev) => (prev + 1) % radarData.frames.length);
+                  }}
+                  className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 cursor-pointer"
+                  title="Next Frame"
+                >
+                  <SkipForward className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {radarEngine === 'loop' && (
-                <span
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                    isPlayingRadar
-                      ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/40'
-                      : 'bg-amber-950/60 text-amber-300 border border-amber-500/40'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isPlayingRadar ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+              {/* Color Scheme & Status Footer */}
+              <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1 border-t border-slate-800/60">
+                <div className="flex items-center gap-1.5">
+                  <span>PALETTE:</span>
+                  <button
+                    onClick={() => setRadarColorScheme(2)}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      radarColorScheme === 2
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                        : 'text-slate-500 hover:text-slate-300'
                     }`}
-                  />
-                  {isPlayingRadar ? 'LOOPING' : 'PAUSED'}
-                </span>
-              )}
-
-              <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30">
-                {radarEngine === 'loop'
-                  ? radarFrameIndex >= 0 && radarData.frames[radarFrameIndex]
-                    ? `${radarData.frames[radarFrameIndex].formattedTime} (${radarFrameIndex + 1}/${radarData.frames.length})`
-                    : 'LIVE'
-                  : 'NATIVE ECCC'}
-              </span>
-            </div>
-          </div>
-
-          {/* North Perth Radar Atmospheric Status */}
-          <div className="flex items-center justify-between text-[9px] bg-slate-900/80 rounded px-2 py-1 mb-2 border border-slate-800">
-            <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              NORTH PERTH: <span className="text-white font-bold">CLEAR (0.0 mm/h)</span>
-            </span>
-            <span className="text-slate-500 font-mono">13 FRAMES BUFFERED</span>
-          </div>
-
-          {/* Controls Bar */}
-          <div className="flex items-center gap-2 mb-2">
-            {/* Play / Pause Button */}
-            <button
-              onClick={() => setIsPlayingRadar(!isPlayingRadar)}
-              className="flex items-center justify-center w-7 h-7 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition-all shadow-[0_0_10px_#00f2fe] cursor-pointer flex-shrink-0"
-              title={isPlayingRadar ? 'Pause' : 'Play Loop'}
-            >
-              {isPlayingRadar ? (
-                <Pause className="w-3.5 h-3.5 fill-current" />
-              ) : (
-                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-              )}
-            </button>
-
-            {/* Step Back */}
-            <button
-              onClick={() => {
-                setIsPlayingRadar(false);
-                setRadarFrameIndex((prev) => (prev > 0 ? prev - 1 : radarData.frames.length - 1));
-              }}
-              className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 cursor-pointer"
-              title="Previous Frame"
-            >
-              <SkipBack className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Frame Scrubber */}
-            <input
-              type="range"
-              min={0}
-              max={radarData.frames.length - 1}
-              value={radarFrameIndex >= 0 ? radarFrameIndex : radarData.frames.length - 1}
-              onChange={(e) => {
-                setIsPlayingRadar(false);
-                setRadarFrameIndex(parseInt(e.target.value));
-              }}
-              className="flex-1 accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
-            />
-
-            {/* Step Forward */}
-            <button
-              onClick={() => {
-                setIsPlayingRadar(false);
-                setRadarFrameIndex((prev) => (prev + 1) % radarData.frames.length);
-              }}
-              className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 cursor-pointer"
-              title="Next Frame"
-            >
-              <SkipForward className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Color Scheme & Status Footer */}
-          <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1 border-t border-slate-800/60">
-            <div className="flex items-center gap-1.5">
-              <span>PALETTE:</span>
-              <button
-                onClick={() => setRadarColorScheme(2)}
-                className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                  radarColorScheme === 2
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                BLUE
-              </button>
-              <button
-                onClick={() => setRadarColorScheme(8)}
-                className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                  radarColorScheme === 8
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                NEXRAD
-              </button>
-              <button
-                onClick={() => setRadarColorScheme(4)}
-                className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                  radarColorScheme === 4
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                RAINBOW
-              </button>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => mapInstanceRef.current?.flyTo([46.0, -81.5], 6.5, { duration: 1.2 })}
-                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400 cursor-pointer text-[9px] font-bold"
-                title="Pan to view active regional precipitation storm echoes over Ontario / Great Lakes"
-              >
-                REGIONAL STORM
-              </button>
-              <button
-                onClick={() => mapInstanceRef.current?.flyTo(NORTH_PERTH_COORDS, 11, { duration: 1.2 })}
-                className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 cursor-pointer text-[9px] font-bold"
-                title="Focus on North Perth / Listowel HQ"
-              >
-                LISTOWEL HQ
-              </button>
-            </div>
-          </div>
+                  >
+                    BLUE
+                  </button>
+                  <button
+                    onClick={() => setRadarColorScheme(8)}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      radarColorScheme === 8
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    NEXRAD
+                  </button>
+                  <button
+                    onClick={() => setRadarColorScheme(4)}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      radarColorScheme === 4
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    RAINBOW
+                  </button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => mapInstanceRef.current?.flyTo([46.0, -81.5], 6.5, { duration: 1.2 })}
+                    className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400 cursor-pointer text-[9px] font-bold"
+                    title="Pan to view active regional precipitation storm echoes over Ontario / Great Lakes"
+                  >
+                    REGIONAL STORM
+                  </button>
+                  <button
+                    onClick={() => mapInstanceRef.current?.flyTo(NORTH_PERTH_COORDS, 11, { duration: 1.2 })}
+                    className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 cursor-pointer text-[9px] font-bold"
+                    title="Focus on North Perth / Listowel HQ"
+                  >
+                    LISTOWEL HQ
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

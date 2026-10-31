@@ -26,10 +26,23 @@ import {
   SeismicEvent,
 } from './services/hazards';
 import { fetchLiveMilitaryFlights, MilitaryFlight } from './services/godseye';
-import { Layers, Activity, X, Sprout } from 'lucide-react';
+import { Layers, Activity, X, Sprout, CloudSun } from 'lucide-react';
 
 export function App() {
   const [isAgriModalOpen, setIsAgriModalOpen] = useState<boolean>(false);
+
+  // Desktop sidebars visibility state (Default to false so the map takes up 100% of the screen!)
+  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState<boolean>(false);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState<boolean>(false);
+  const [rightPanelTab, setRightPanelTab] = useState<'oracle' | 'weather' | 'airspace' | 'seismic'>('weather');
+
+  // Trigger map canvas resize recalculation when panels open or close
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isLeftPanelOpen, isRightPanelOpen]);
 
   // Mobile drawer states: 'none' | 'layers' | 'intel'
   const [mobileDrawer, setMobileDrawer] = useState<'none' | 'layers' | 'intel'>('none');
@@ -239,6 +252,22 @@ export function App() {
         criticalAlert={criticalAlert}
         opticMode={opticMode}
         onChangeOpticMode={setOpticMode}
+        isLeftPanelOpen={isLeftPanelOpen}
+        onToggleLeftPanel={() => setIsLeftPanelOpen((prev) => !prev)}
+        isRightPanelOpen={isRightPanelOpen}
+        onToggleRightPanel={(tab) => {
+          if (tab) {
+            setRightPanelTab(tab);
+            setIsRightPanelOpen(true);
+          } else {
+            setIsRightPanelOpen((prev) => !prev);
+          }
+        }}
+        rightPanelTab={rightPanelTab}
+        onCollapseAllPanels={() => {
+          setIsLeftPanelOpen(false);
+          setIsRightPanelOpen(false);
+        }}
       />
 
       {/* Space Weather & Aurora Kp Ticker */}
@@ -255,18 +284,21 @@ export function App() {
 
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* DESKTOP Left Layer Control */}
-        <div className="hidden lg:flex flex-shrink-0">
-          <LayerControlPanel
-            layers={layers}
-            onToggleLayer={handleToggleLayer}
-            radarOpacity={radarOpacity}
-            onChangeRadarOpacity={setRadarOpacity}
-            flightCount={flights.length}
-            vesselCount={vessels.length}
-            milFlightCount={milFlights.length}
-          />
-        </div>
+        {/* DESKTOP Left Layer Control (Collapsible for Full Map Clarity) */}
+        {isLeftPanelOpen && (
+          <div className="hidden lg:flex flex-shrink-0 animate-slide-right transition-all">
+            <LayerControlPanel
+              layers={layers}
+              onToggleLayer={handleToggleLayer}
+              radarOpacity={radarOpacity}
+              onChangeRadarOpacity={setRadarOpacity}
+              flightCount={flights.length}
+              vesselCount={vessels.length}
+              milFlightCount={milFlights.length}
+              onClose={() => setIsLeftPanelOpen(false)}
+            />
+          </div>
+        )}
 
         {/* Central Tactical Map HUD */}
         <main className="flex-1 relative h-full w-full overflow-hidden">
@@ -290,21 +322,30 @@ export function App() {
           />
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
-          <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
-            {/* Left Buttons: Mobile Drawer + Agri Modal Trigger */}
+          <div className="absolute top-12 sm:top-14 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+            {/* Left Buttons: Layers + Agri Modal Trigger */}
             <div className="flex items-center gap-2 pointer-events-auto">
-              <button
-                onClick={() => setMobileDrawer((prev) => (prev === 'layers' ? 'none' : 'layers'))}
-                className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-cyan-500/50 text-cyan-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform cursor-pointer"
-              >
-                <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Layers</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-              </button>
+              {!isLeftPanelOpen && (
+                <button
+                  onClick={() => {
+                    if (window.innerWidth < 1024) {
+                      setMobileDrawer('layers');
+                    } else {
+                      setIsLeftPanelOpen(true);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-cyan-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                  title="Open Map Layers Control"
+                >
+                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>LAYERS</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                </button>
+              )}
 
               <button
                 onClick={() => setIsAgriModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
                 title="Open Delta-T Spraying Window & Grain Bids"
               >
                 <Sprout className="w-3.5 h-3.5 text-emerald-400" />
@@ -313,35 +354,52 @@ export function App() {
               </button>
             </div>
 
-            {/* Right Buttons: Mobile Sitrep Drawer */}
-            <div className="lg:hidden pointer-events-auto">
-              <button
-                onClick={() => setMobileDrawer((prev) => (prev === 'intel' ? 'none' : 'intel'))}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-lg backdrop-blur-md active:scale-95 transition-transform cursor-pointer"
-              >
-                <Activity className="w-3.5 h-3.5 text-amber-400" />
-                <span>Sitrep ({flights.length + vessels.length + milFlights.length})</span>
-              </button>
+            {/* Right Buttons: Floating Weather & Sitrep Trigger */}
+            <div className="pointer-events-auto">
+              {!isRightPanelOpen && (
+                <button
+                  onClick={() => {
+                    if (window.innerWidth < 1024) {
+                      setMobileDrawer('intel');
+                    } else {
+                      setRightPanelTab('weather');
+                      setIsRightPanelOpen(true);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-slate-200 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                  title="Open Live Weather & Telemetry Sidebar"
+                >
+                  <CloudSun className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                  <span className="text-cyan-300 font-bold">{weather?.temperatureC ?? '--'}°C</span>
+                  <span className="text-slate-400 text-[11px] hidden sm:inline">{weather?.conditionLabel ?? 'Weather'}</span>
+                  <span className="text-[10px] text-cyan-400 font-bold">◀ INTEL</span>
+                </button>
+              )}
             </div>
           </div>
         </main>
 
-        {/* DESKTOP Right Intel Panel */}
-        <div className="hidden lg:flex flex-shrink-0">
-          <RightIntelPanel
-            weather={weather}
-            riverGauges={riverGauges}
-            flights={flights}
-            earthquakes={earthquakes}
-            selectedFlight={selectedFlight}
-            onSelectFlight={handleSelectFlight}
-            onOpenAgriModal={() => setIsAgriModalOpen(true)}
-            vessels={vessels}
-            selectedVessel={selectedVessel}
-            onSelectVessel={setSelectedVessel}
-            milFlights={milFlights}
-          />
-        </div>
+        {/* DESKTOP Right Intel Panel (Collapsible for Full Map Clarity) */}
+        {isRightPanelOpen && (
+          <div className="hidden lg:flex flex-shrink-0 animate-slide-left transition-all">
+            <RightIntelPanel
+              weather={weather}
+              riverGauges={riverGauges}
+              flights={flights}
+              earthquakes={earthquakes}
+              selectedFlight={selectedFlight}
+              onSelectFlight={handleSelectFlight}
+              onOpenAgriModal={() => setIsAgriModalOpen(true)}
+              vessels={vessels}
+              selectedVessel={selectedVessel}
+              onSelectVessel={setSelectedVessel}
+              milFlights={milFlights}
+              onClose={() => setIsRightPanelOpen(false)}
+              activeTab={rightPanelTab}
+              onChangeTab={setRightPanelTab}
+            />
+          </div>
+        )}
 
         {/* MOBILE Slide-out Drawer: Layers */}
         {mobileDrawer === 'layers' && (
@@ -371,6 +429,7 @@ export function App() {
                   flightCount={flights.length}
                   vesselCount={vessels.length}
                   milFlightCount={milFlights.length}
+                  onClose={() => setMobileDrawer('none')}
                 />
               </div>
             </div>
@@ -412,6 +471,9 @@ export function App() {
                   selectedVessel={selectedVessel}
                   onSelectVessel={setSelectedVessel}
                   milFlights={milFlights}
+                  onClose={() => setMobileDrawer('none')}
+                  activeTab={rightPanelTab}
+                  onChangeTab={setRightPanelTab}
                 />
               </div>
             </div>

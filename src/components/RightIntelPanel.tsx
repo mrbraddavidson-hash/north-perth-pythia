@@ -21,6 +21,7 @@ import {
   Thermometer,
   Compass,
   Sun,
+  X,
 } from 'lucide-react';
 import {
   FlightData,
@@ -47,6 +48,9 @@ interface RightIntelPanelProps {
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
   milFlights?: MilitaryFlight[];
   earthquakes?: SeismicEvent[];
+  onClose?: () => void;
+  activeTab?: 'oracle' | 'weather' | 'airspace' | 'seismic';
+  onChangeTab?: (tab: 'oracle' | 'weather' | 'airspace' | 'seismic') => void;
 }
 
 export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
@@ -61,8 +65,13 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   onSelectVessel,
   milFlights = [],
   earthquakes = [],
+  onClose,
+  activeTab: controlledTab,
+  onChangeTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<'oracle' | 'weather' | 'airspace' | 'seismic'>('oracle');
+  const [internalTab, setInternalTab] = useState<'oracle' | 'weather' | 'airspace' | 'seismic'>('weather');
+  const currentTab = controlledTab ?? internalTab;
+  const setTab = onChangeTab ?? setInternalTab;
 
   const mainGauge = riverGauges.find((g) => g.stationId === '02FE003') || riverGauges[0];
   const orngeFlight = flights.find((f) => f.callsign.includes('ORNGE') || f.callsign.includes('MEDEVAC'));
@@ -71,24 +80,30 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   const weatherAlerts = getWeatherAlerts(weather);
 
   return (
-    <aside className="w-96 flex-shrink-0 flex flex-col bg-slate-950/90 border-l border-cyan-500/20 backdrop-blur-md overflow-hidden z-20">
+    <aside className="w-72 sm:w-84 flex-shrink-0 flex flex-col bg-slate-950/95 border-l border-cyan-500/20 backdrop-blur-md overflow-hidden z-20 shadow-2xl">
+      {/* Header with Close / Hide Button */}
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-cyan-500/20 bg-slate-950">
+        <span className="font-tactical text-[10px] font-bold text-cyan-400 tracking-wider">
+          INTEL & METEOROLOGY
+        </span>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer text-[9px] font-mono transition-colors"
+            title="Collapse Sidebar (Full Map View)"
+          >
+            <span>HIDE</span>
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="flex items-center border-b border-cyan-500/20 bg-slate-900/50">
         <button
-          onClick={() => setActiveTab('oracle')}
+          onClick={() => setTab('weather')}
           className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            activeTab === 'oracle'
-              ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Sparkles className="w-3 h-3" />
-          SITREP
-        </button>
-        <button
-          onClick={() => setActiveTab('weather')}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            activeTab === 'weather'
+            currentTab === 'weather'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
@@ -97,9 +112,20 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           WEATHER {weather ? `(${weather.temperatureC}°)` : ''}
         </button>
         <button
-          onClick={() => setActiveTab('airspace')}
+          onClick={() => setTab('oracle')}
           className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            activeTab === 'airspace'
+            currentTab === 'oracle'
+              ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Sparkles className="w-3 h-3" />
+          SITREP
+        </button>
+        <button
+          onClick={() => setTab('airspace')}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+            currentTab === 'airspace'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
@@ -108,9 +134,9 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           AIR ({flights.length + milFlights.length})
         </button>
         <button
-          onClick={() => setActiveTab('seismic')}
+          onClick={() => setTab('seismic')}
           className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            activeTab === 'seismic'
+            currentTab === 'seismic'
               ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
@@ -123,7 +149,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 font-mono text-xs">
         {/* TAB 1: AI SITREP (PYTHIA ORACLE) */}
-        {activeTab === 'oracle' && (
+        {currentTab === 'oracle' && (
           <div className="space-y-3">
             {/* Ornge Medevac Priority Banner if detected */}
             {orngeFlight && (
@@ -286,7 +312,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
         )}
 
         {/* TAB 2: WEATHER & RADAR METEOROLOGY */}
-        {activeTab === 'weather' && (
+        {currentTab === 'weather' && (
           <div className="space-y-3">
             {/* Header / Current Station */}
             <div className="p-3 rounded bg-slate-900/80 border border-cyan-500/40 shadow-sm space-y-2.5">
@@ -458,7 +484,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
         )}
 
         {/* TAB 3: AIRSPACE (ADS-B LIVE RADAR) */}
-        {activeTab === 'airspace' && (
+        {currentTab === 'airspace' && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
               <span className="flex items-center gap-1.5">
@@ -647,8 +673,8 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
           </div>
         )}
 
-        {/* TAB 3: REGIONAL SEISMIC ACTIVITY (USGS LIVE) */}
-        {activeTab === 'seismic' && (
+        {/* TAB 4: REGIONAL SEISMIC ACTIVITY (USGS LIVE) */}
+        {currentTab === 'seismic' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
               <span className="flex items-center gap-1.5 font-bold text-amber-400">
