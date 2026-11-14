@@ -67,6 +67,7 @@ interface MapProps {
   selectedVessel?: MaritimeVessel | null;
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
   milFlights?: MilitaryFlight[];
+  onSwitchTo3D?: () => void;
 }
 
 type MapStyle = 'tactical' | 'streets' | 'satellite' | 'topo';
@@ -88,6 +89,7 @@ export const MapView: React.FC<MapProps> = ({
   selectedVessel = null,
   onSelectVessel,
   milFlights = [],
+  onSwitchTo3D,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -1434,6 +1436,17 @@ export const MapView: React.FC<MapProps> = ({
           <Mountain className="w-3 h-3" />
           TOPO
         </button>
+
+        {onSwitchTo3D && (
+          <button
+            onClick={onSwitchTo3D}
+            className="flex items-center gap-1 px-2 sm:px-3 py-1 rounded transition-all font-bold whitespace-nowrap bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/60 text-cyan-300 shadow-[0_0_8px_rgba(0,242,254,0.3)] hover:text-white"
+            title="Switch to 3D God's Eye Globe & Terrain View"
+          >
+            <Orbit className="w-3 h-3 text-cyan-400" />
+            <span>3D GLOBE</span>
+          </button>
+        )}
 
         {/* Subtle Sector Selector */}
         <div className="h-3 w-px bg-slate-800 mx-0.5 hidden sm:block" />

@@ -3,6 +3,7 @@ import { HeaderHUD } from './components/HeaderHUD';
 import { LayerControlPanel } from './components/LayerControlPanel';
 import { RightIntelPanel } from './components/RightIntelPanel';
 import { MapView } from './components/Map';
+import { GodsEye3DView } from './components/GodsEye3DView';
 import { SpaceWeatherBar } from './components/SpaceWeatherBar';
 import { AgriFuelModal } from './components/AgriFuelModal';
 import {
@@ -30,6 +31,7 @@ import { Layers, Activity, X, Sprout, CloudSun } from 'lucide-react';
 
 export function App() {
   const [isAgriModalOpen, setIsAgriModalOpen] = useState<boolean>(false);
+  const [viewDimension, setViewDimension] = useState<'2d' | '3d'>('3d');
 
   // Desktop sidebars visibility state (Default to false so the map takes up 100% of the screen!)
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState<boolean>(false);
@@ -268,6 +270,8 @@ export function App() {
           setIsLeftPanelOpen(false);
           setIsRightPanelOpen(false);
         }}
+        viewDimension={viewDimension}
+        onToggleViewDimension={setViewDimension}
       />
 
       {/* Space Weather & Aurora Kp Ticker */}
@@ -300,26 +304,45 @@ export function App() {
           </div>
         )}
 
-        {/* Central Tactical Map HUD */}
+        {/* Central Tactical Viewport (3D God's Eye or 2D Map) */}
         <main className="flex-1 relative h-full w-full overflow-hidden">
-          <MapView
-            layers={layers}
-            flights={flights}
-            riverGauges={riverGauges}
-            selectedFlight={selectedFlight}
-            onSelectFlight={handleSelectFlight}
-            radarOpacity={radarOpacity}
-            squallTrajectory={squallTrajectory}
-            iss={iss}
-            earthquakes={earthquakes}
-            onApplyPreset={handleApplyPreset}
-            vessels={vessels}
-            opticMode={opticMode}
-            onChangeOpticMode={setOpticMode}
-            selectedVessel={selectedVessel}
-            onSelectVessel={setSelectedVessel}
-            milFlights={milFlights}
-          />
+          {viewDimension === '3d' ? (
+            <GodsEye3DView
+              layers={layers}
+              flights={flights}
+              riverGauges={riverGauges}
+              selectedFlight={selectedFlight}
+              onSelectFlight={handleSelectFlight}
+              radarOpacity={radarOpacity}
+              iss={iss}
+              vessels={vessels}
+              opticMode={opticMode}
+              selectedVessel={selectedVessel}
+              onSelectVessel={setSelectedVessel}
+              milFlights={milFlights}
+              onSwitchTo2D={() => setViewDimension('2d')}
+            />
+          ) : (
+            <MapView
+              layers={layers}
+              flights={flights}
+              riverGauges={riverGauges}
+              selectedFlight={selectedFlight}
+              onSelectFlight={handleSelectFlight}
+              radarOpacity={radarOpacity}
+              squallTrajectory={squallTrajectory}
+              iss={iss}
+              earthquakes={earthquakes}
+              onApplyPreset={handleApplyPreset}
+              vessels={vessels}
+              opticMode={opticMode}
+              onChangeOpticMode={setOpticMode}
+              selectedVessel={selectedVessel}
+              onSelectVessel={setSelectedVessel}
+              milFlights={milFlights}
+              onSwitchTo3D={() => setViewDimension('3d')}
+            />
+          )}
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
           <div className="absolute top-12 sm:top-14 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">

@@ -16,6 +16,7 @@ import {
   CloudSun,
   Layers,
   Map as MapIcon,
+  Orbit,
 } from 'lucide-react';
 import { WeatherTelemetry, OpticMode } from '../services/types';
 
@@ -34,6 +35,8 @@ interface HeaderHUDProps {
   onToggleRightPanel?: (tab?: 'oracle' | 'weather' | 'airspace' | 'seismic') => void;
   rightPanelTab?: 'oracle' | 'weather' | 'airspace' | 'seismic';
   onCollapseAllPanels?: () => void;
+  viewDimension?: '2d' | '3d';
+  onToggleViewDimension?: (dim: '2d' | '3d') => void;
 }
 
 export const HeaderHUD: React.FC<HeaderHUDProps> = ({
@@ -51,6 +54,8 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   onToggleRightPanel,
   rightPanelTab = 'weather',
   onCollapseAllPanels,
+  viewDimension = '2d',
+  onToggleViewDimension,
 }) => {
   const [timeUtc, setTimeUtc] = useState<string>('');
   const [timeLocal, setTimeLocal] = useState<string>('');
@@ -243,6 +248,35 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
             </button>
           )}
         </div>
+
+        {/* 2D / 3D God's Eye Globe Viewport Toggle */}
+        {onToggleViewDimension && (
+          <div className="flex items-center bg-black/80 rounded border border-cyan-500/50 p-0.5 text-[10px] font-mono shadow-[0_0_12px_rgba(0,242,254,0.25)]">
+            <button
+              onClick={() => onToggleViewDimension('2d')}
+              className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                viewDimension === '2d'
+                  ? 'bg-cyan-500 text-black shadow-[0_0_8px_#00f2fe]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Standard 2D Tactical Leaflet Map"
+            >
+              2D
+            </button>
+            <button
+              onClick={() => onToggleViewDimension('3d')}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                viewDimension === '3d'
+                  ? 'bg-cyan-500 text-black shadow-[0_0_8px_#00f2fe]'
+                  : 'text-cyan-300 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Switch to 3D God's Eye Globe & Terrain View"
+            >
+              <Orbit className="w-3 h-3 text-cyan-400" />
+              <span>3D GLOBE</span>
+            </button>
+          </div>
+        )}
 
         {/* God's Eye Sensor Shader Optics (bilawalsidhu/gods-eye-view) */}
         {onChangeOpticMode && (
