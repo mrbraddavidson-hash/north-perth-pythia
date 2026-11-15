@@ -10,6 +10,7 @@ import {
   LiveIncidentEvent,
 } from '../services/types';
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS, TownMarker } from '../services/api';
+import { NORTH_PERTH_AGRI_HUBS, AgriHubLocation } from '../services/agri';
 import { LISTOWEL_HELIPAD_COORDS, SquallTrajectory } from '../services/squall';
 import { IssTelemetry } from '../services/space';
 import { SeismicEvent } from '../services/hazards';
@@ -126,6 +127,7 @@ export const MapView: React.FC<MapProps> = ({
   const seismicGroupRef = useRef<L.LayerGroup | null>(null);
   const vesselsGroupRef = useRef<L.LayerGroup | null>(null);
   const militaryGroupRef = useRef<L.LayerGroup | null>(null);
+  const agriHubsGroupRef = useRef<L.LayerGroup | null>(null);
   const [cameraTrackLock, setCameraTrackLock] = useState<boolean>(false);
   const [currentCenter, setCurrentCenter] = useState<[number, number]>(NORTH_PERTH_COORDS);
   const [currentZoom, setCurrentZoom] = useState<number>(11);
@@ -209,6 +211,7 @@ export const MapView: React.FC<MapProps> = ({
     seismicGroupRef.current = L.layerGroup().addTo(map);
     vesselsGroupRef.current = L.layerGroup().addTo(map);
     militaryGroupRef.current = L.layerGroup().addTo(map);
+    agriHubsGroupRef.current = L.layerGroup().addTo(map);
 
     const updateMapCenterAndZoom = () => {
       const c = map.getCenter();
@@ -535,6 +538,77 @@ export const MapView: React.FC<MapProps> = ({
       `);
     });
   }, [layers.towns]);
+
+  // Render North Perth Agricultural Infrastructure Hubs (Elevators, Feed Mills, Auctions)
+  useEffect(() => {
+    if (!agriHubsGroupRef.current || !mapInstanceRef.current) return;
+    agriHubsGroupRef.current.clearLayers();
+
+    if (!layers.agriHubs) return;
+
+    NORTH_PERTH_AGRI_HUBS.forEach((hub) => {
+      const isElevator = hub.category === 'ELEVATOR';
+      const isAuction = hub.category === 'LIVESTOCK_AUCTION';
+      const isFeedMill = hub.category === 'FEED_MILL';
+
+      const badgeHtml = `
+        <div class="agri-hub-badge flex items-center gap-1.5 cursor-pointer pointer-events-auto select-none group">
+          <div class="flex items-center justify-center w-6 h-6 rounded ${
+            isElevator
+              ? 'bg-amber-950/90 border border-amber-400 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+              : isAuction
+              ? 'bg-blue-950/90 border border-blue-400 text-blue-300 shadow-[0_0_8px_rgba(59,130,246,0.4)]'
+              : 'bg-emerald-950/90 border border-emerald-400 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+          }">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/>
+              <path d="M6 12h12"/>
+              <path d="M6 8h12"/>
+              <path d="M6 16h12"/>
+            </svg>
+          </div>
+          <div class="flex flex-col">
+            <span class="font-mono text-[10px] font-bold tracking-wider text-slate-100 drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] group-hover:text-emerald-300 transition-colors">
+              ${hub.name.split('(')[0].trim()}
+            </span>
+            <span class="font-mono text-[8px] font-semibold tracking-wider text-emerald-400 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+              ${hub.category.replace('_', ' ')}
+            </span>
+          </div>
+        </div>
+      `;
+
+      const icon = L.divIcon({
+        className: 'agri-hub-icon',
+        html: badgeHtml,
+        iconSize: [140, 28],
+        iconAnchor: [12, 14],
+      });
+
+      const marker = L.marker([hub.lat, hub.lng], { icon, zIndexOffset: 45 })
+        .addTo(agriHubsGroupRef.current!)
+        .on('click', () => {
+          mapInstanceRef.current?.flyTo([hub.lat, hub.lng], 14, { duration: 1 });
+        });
+
+      const servicesHtml = hub.services
+        .map((s) => `<span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700">${s}</span>`)
+        .join(' ');
+
+      marker.bindPopup(`
+        <div class="p-2 space-y-1.5 font-mono text-xs max-w-xs">
+          <div class="flex items-center justify-between border-b border-emerald-500/30 pb-1">
+            <span class="font-bold text-emerald-300 text-sm">${hub.name}</span>
+          </div>
+          <div class="text-[10px] text-amber-300 font-bold">${hub.category.replace('_', ' ')} // ${hub.town}</div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">${hub.description}</p>
+          <div class="pt-1 border-t border-slate-800 flex flex-wrap gap-1">
+            ${servicesHtml}
+          </div>
+        </div>
+      `);
+    });
+  }, [layers.agriHubs]);
 
   // Render Flights
   useEffect(() => {

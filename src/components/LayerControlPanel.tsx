@@ -15,6 +15,7 @@ import {
   Ship,
   Shield,
   X,
+  Building2,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -54,6 +55,14 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
       icon: <MapPin className="w-4 h-4" />,
       color: 'text-cyan-400',
       badge: '8 TOWNS',
+    },
+    {
+      key: 'agriHubs',
+      label: 'Grain Elevators & Ag Hubs',
+      sublabel: 'P&H, Hensall, Snobelen, Auction',
+      icon: <Building2 className="w-4 h-4" />,
+      color: 'text-emerald-400',
+      badge: '7 HUBS',
     },
     {
       key: 'radar',

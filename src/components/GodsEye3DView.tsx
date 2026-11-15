@@ -13,6 +13,7 @@ import {
   OpticMode,
 } from '../services/types';
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS } from '../services/api';
+import { NORTH_PERTH_AGRI_HUBS } from '../services/agri';
 import { MilitaryFlight, CANADIAN_MILITARY_INSTALLATIONS } from '../services/godseye';
 import { MaritimeVessel } from '../services/maritime';
 import { IssTelemetry } from '../services/space';
@@ -256,6 +257,33 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
 
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat([town.coords[1], town.coords[0]])
+            .addTo(map);
+          currentMarkers[id] = marker;
+        }
+      });
+    }
+
+    // 1b. North Perth Agricultural Hubs in 3D (Elevators, Auctions, Mills)
+    if (layers.agriHubs) {
+      NORTH_PERTH_AGRI_HUBS.forEach((hub) => {
+        const id = `agri-${hub.id}`;
+        activeIds.add(id);
+
+        if (!currentMarkers[id]) {
+          const el = document.createElement('div');
+          el.className = 'cursor-pointer select-none';
+          el.innerHTML = `
+            <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950/90 border border-emerald-400 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.4)] font-mono text-[9px] font-bold backdrop-blur-md hover:scale-110 transition-transform">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>${hub.name.split('(')[0].trim()}</span>
+            </div>
+          `;
+          el.onclick = () => {
+            map.flyTo({ center: [hub.lng, hub.lat], zoom: 14, pitch: 70, duration: 1200 });
+          };
+
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([hub.lng, hub.lat])
             .addTo(map);
           currentMarkers[id] = marker;
         }

@@ -33,10 +33,10 @@ export function App() {
   const [isAgriModalOpen, setIsAgriModalOpen] = useState<boolean>(false);
   const [viewDimension, setViewDimension] = useState<'2d' | '3d'>('3d');
 
-  // Desktop sidebars visibility state (Default to false so the map takes up 100% of the screen!)
+  // Desktop sidebars visibility state (Right panel defaults to true for Agricultural operations!)
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState<boolean>(false);
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState<boolean>(false);
-  const [rightPanelTab, setRightPanelTab] = useState<'oracle' | 'weather' | 'airspace' | 'seismic'>('weather');
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState<boolean>(true);
+  const [rightPanelTab, setRightPanelTab] = useState<'agri' | 'markets' | 'weather' | 'hubs'>('agri');
 
   // Trigger map canvas resize recalculation when panels open or close
   useEffect(() => {
@@ -49,20 +49,21 @@ export function App() {
   // Mobile drawer states: 'none' | 'layers' | 'intel'
   const [mobileDrawer, setMobileDrawer] = useState<'none' | 'layers' | 'intel'>('none');
 
-  // Layer visibility state - ONLY verified functioning live feeds
+  // Layer visibility state - Farm & Agrometeorology defaults
   const [layers, setLayers] = useState<ActiveLayers>({
     towns: true,
+    agriHubs: true,
     radar: true,
     squall: true,
     flights: true,
-    military: true,
+    military: false,
     river: true,
     weather: true,
-    maritime: true,
+    maritime: false,
     helipad: true,
-    seismic: true,
-    drought: false,
-    satellites: true,
+    seismic: false,
+    drought: true,
+    satellites: false,
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
@@ -182,6 +183,7 @@ export function App() {
     if (preset === 'all') {
       setLayers({
         towns: true,
+        agriHubs: true,
         radar: true,
         squall: true,
         flights: true,
@@ -191,12 +193,13 @@ export function App() {
         maritime: true,
         helipad: true,
         seismic: true,
-        drought: false,
+        drought: true,
         satellites: true,
       });
     } else if (preset === 'weather') {
       setLayers({
         towns: true,
+        agriHubs: true,
         radar: true,
         squall: true,
         flights: false,
@@ -212,6 +215,7 @@ export function App() {
     } else if (preset === 'rivers') {
       setLayers({
         towns: true,
+        agriHubs: true,
         radar: true,
         squall: false,
         flights: false,
@@ -227,6 +231,7 @@ export function App() {
     } else if (preset === 'airspace') {
       setLayers({
         towns: true,
+        agriHubs: false,
         radar: false,
         squall: false,
         flights: true,
@@ -420,6 +425,8 @@ export function App() {
               onClose={() => setIsRightPanelOpen(false)}
               activeTab={rightPanelTab}
               onChangeTab={setRightPanelTab}
+              isDroughtLayerActive={Boolean(layers.drought)}
+              onToggleDroughtLayer={() => handleToggleLayer('drought')}
             />
           </div>
         )}
@@ -466,9 +473,9 @@ export function App() {
             <div className="relative z-50 w-full max-h-[82dvh] flex flex-col bg-slate-950 border-t border-amber-500/40 shadow-2xl animate-slide-up rounded-t-xl overflow-hidden">
               <div className="flex items-center justify-between p-3 border-b border-amber-500/20 bg-slate-900/80">
                 <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-amber-400" />
+                  <Sprout className="w-4 h-4 text-emerald-400" />
                   <span className="font-tactical text-sm font-bold text-white tracking-wider">
-                    SITREP, AIRSPACE & SEISMIC
+                    AGRI-OPERATIONS // PERTH COUNTY
                   </span>
                 </div>
                 <button
@@ -497,6 +504,8 @@ export function App() {
                   onClose={() => setMobileDrawer('none')}
                   activeTab={rightPanelTab}
                   onChangeTab={setRightPanelTab}
+                  isDroughtLayerActive={Boolean(layers.drought)}
+                  onToggleDroughtLayer={() => handleToggleLayer('drought')}
                 />
               </div>
             </div>

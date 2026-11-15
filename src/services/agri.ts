@@ -406,3 +406,140 @@ export function calculateCashGrain(
     cashCadPerTonne,
   };
 }
+
+// 7. Dairy & Livestock Heat Stress Index (THI - National Research Council standard)
+export interface LivestockStressTelemetry {
+  thi: number;
+  level: 'COMFORT' | 'MILD_STRESS' | 'MODERATE_STRESS' | 'SEVERE_STRESS';
+  label: string;
+  milkYieldImpact: string;
+  barnVentilationAdvice: string;
+}
+
+export function calculateDairyHeatStress(tempC: number, rhPercent: number): LivestockStressTelemetry {
+  const T = tempC;
+  const RH = Math.max(1, Math.min(100, rhPercent));
+  // Standard THI formula for dairy cattle
+  const thi = Math.round(
+    ((1.8 * T + 32) - (0.55 - 0.0055 * RH) * (1.8 * T - 26)) * 10
+  ) / 10;
+
+  if (thi < 68) {
+    return {
+      thi,
+      level: 'COMFORT',
+      label: 'Thermal Comfort Zone',
+      milkYieldImpact: 'Normal dry matter intake (DMI) and peak milk yield.',
+      barnVentilationAdvice: 'Standard ambient ventilation. Minimal fan/misting requirement.',
+    };
+  } else if (thi < 72) {
+    return {
+      thi,
+      level: 'MILD_STRESS',
+      label: 'Mild Heat Stress',
+      milkYieldImpact: 'Expected -1.0 to -2.0 kg/day milk loss per cow; slight DMI reduction.',
+      barnVentilationAdvice: 'Activate barn circulation fans (air speed > 2 m/s over free stalls).',
+    };
+  } else if (thi < 79) {
+    return {
+      thi,
+      level: 'MODERATE_STRESS',
+      label: 'Moderate Heat Stress',
+      milkYieldImpact: 'Expected -2.5 to -4.0 kg/day milk drop; increased respiratory rate (>75 bpm).',
+      barnVentilationAdvice: 'Run maximum ventilation + soaking/misting cycles at feed bunk every 5-10 min.',
+    };
+  } else {
+    return {
+      thi,
+      level: 'SEVERE_STRESS',
+      label: 'Severe Heat Stress / Danger',
+      milkYieldImpact: 'Severe drop >5.0 kg/day; reproductive depression; acute risk of heat exhaustion.',
+      barnVentilationAdvice: 'Continuous soaking, emergency tunnel ventilation, electrolyte hydration in water troughs.',
+    };
+  }
+}
+
+// 8. North Perth & Regional Agricultural Infrastructure Points of Interest
+export interface AgriHubLocation {
+  id: string;
+  name: string;
+  category: 'ELEVATOR' | 'FEED_MILL' | 'LIVESTOCK_AUCTION' | 'AG_FERTILIZER';
+  town: string;
+  lat: number;
+  lng: number;
+  description: string;
+  services: string[];
+}
+
+export const NORTH_PERTH_AGRI_HUBS: AgriHubLocation[] = [
+  {
+    id: 'ph-listowel',
+    name: 'Parrish & Heimbecker (P&H) Listowel',
+    category: 'ELEVATOR',
+    town: 'Listowel',
+    lat: 43.7371,
+    lng: -80.9575,
+    description: 'Major grain handling terminal & commercial drying facility on Line 86.',
+    services: ['Corn / Soy / Wheat Receiving', 'Grain Drying', 'Commercial Storage', 'Truck Scale'],
+  },
+  {
+    id: 'hensall-palmerston',
+    name: 'Hensall Co-op (Palmerston Terminal)',
+    category: 'ELEVATOR',
+    town: 'Palmerston',
+    lat: 43.8340,
+    lng: -80.8492,
+    description: 'Regional cooperative receiving facility for IP soybeans, food-grade grain & commodities.',
+    services: ['IP Soybean Receiving', 'Cash Grain Contracts', 'Crop Protection', 'Seed Sales'],
+  },
+  {
+    id: 'snobelen-blyth',
+    name: 'Snobelen Farms Ltd.',
+    category: 'ELEVATOR',
+    town: 'Blyth / Palmerston',
+    lat: 43.7285,
+    lng: -81.3855,
+    description: 'Independent grain merchandising, seed processing, and export terminal.',
+    services: ['Elevator Grain Bids', 'Pedigreed Seed', 'Custom Agronomy', 'Grain Trucking'],
+  },
+  {
+    id: 'listowel-livestock',
+    name: 'Listowel Livestock Auction',
+    category: 'LIVESTOCK_AUCTION',
+    town: 'Listowel',
+    lat: 43.7245,
+    lng: -80.9632,
+    description: 'Weekly dairy cattle, beef stocker, calf, and replacement heifer live auction on Line 86.',
+    services: ['Dairy Replacement Sales', 'Feeder Cattle Auctions', 'Livestock Scales', 'Veterinary Inspection'],
+  },
+  {
+    id: 'wallenstein-feed',
+    name: 'Wallenstein Feed & Supply Ltd.',
+    category: 'FEED_MILL',
+    town: 'Wallenstein',
+    lat: 43.5855,
+    lng: -80.6420,
+    description: 'Largest commercial livestock feed manufacturer in Southwestern Ontario (Dairy, Swine, Poultry).',
+    services: ['Custom Dairy Rations', 'Bulk Pellet Delivery', 'Nutritional Agronomy', 'Poultry Feeds'],
+  },
+  {
+    id: 'masterfeeds-listowel',
+    name: 'Masterfeeds Listowel Depot',
+    category: 'FEED_MILL',
+    town: 'Listowel',
+    lat: 43.7310,
+    lng: -80.9490,
+    description: 'Agricultural feed manufacturing and mineral supplementation distribution.',
+    services: ['Swine Premixes', 'Dairy Minerals', 'Pasture Supplements', 'Bulk Delivery'],
+  },
+  {
+    id: 'fs-partners-atwood',
+    name: 'FS PARTNERS (Atwood Agronomy Branch)',
+    category: 'AG_FERTILIZER',
+    town: 'Atwood',
+    lat: 43.6880,
+    lng: -81.0180,
+    description: 'Bulk dry & liquid fertilizer blending, custom chemical application, and soil sampling.',
+    services: ['Bulk Fertilizer Blending', 'Custom Spraying & Spreading', 'Soil Grid Sampling', 'Seed Distribution'],
+  },
+];

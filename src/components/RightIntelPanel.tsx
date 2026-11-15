@@ -1,27 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Cpu,
-  Plane,
-  Waves,
-  ChevronRight,
-  Sparkles,
   Sprout,
-  HeartPulse,
-  CloudLightning,
-  Activity,
-  Ship,
-  Anchor,
-  Shield,
-  Clock,
-  CloudSun,
-  CloudRain,
+  Flame,
   Wind,
   Droplets,
-  Gauge,
-  Thermometer,
-  Compass,
-  Sun,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
   X,
+  AlertTriangle,
+  CheckCircle2,
+  Thermometer,
+  Activity,
+  Calculator,
+  Sun,
+  MapPin,
+  ExternalLink,
+  Calendar,
+  CloudSun,
+  Waves,
+  HeartPulse,
+  CloudLightning,
+  ChevronRight,
+  ShieldAlert,
+  Building2,
+  Scale,
+  Beef,
+  Wheat,
 } from 'lucide-react';
 import {
   FlightData,
@@ -32,9 +37,27 @@ import {
   getMvcaWatershedBulletin,
   getWeatherAlerts,
 } from '../services/api';
-import { SeismicEvent } from '../services/hazards';
-import { MaritimeVessel } from '../services/maritime';
-import { MilitaryFlight } from '../services/godseye';
+import {
+  calculateSprayWindow,
+  fetchLiveSoilTelemetry,
+  fetchLiveCommodities,
+  getBurnPermitStatus,
+  fetchLiveChuData,
+  fetchLiveUsdCadRate,
+  calculateCashGrain,
+  calculateDairyHeatStress,
+  ONTARIO_ELEVATOR_PRESETS,
+  NORTH_PERTH_AGRI_HUBS,
+  SprayCondition,
+  SoilTelemetry,
+  CommodityFuture,
+  ChuSeasonSummary,
+  OntarioElevatorPreset,
+  LivestockStressTelemetry,
+  AgriHubLocation,
+} from '../services/agri';
+
+export type RightPanelTab = 'agri' | 'markets' | 'weather' | 'hubs';
 
 interface RightIntelPanelProps {
   weather: WeatherTelemetry | null;
@@ -42,55 +65,128 @@ interface RightIntelPanelProps {
   flights: FlightData[];
   selectedFlight: FlightData | null;
   onSelectFlight: (flight: FlightData | null) => void;
-  onOpenAgriModal: () => void;
-  vessels?: MaritimeVessel[];
-  selectedVessel?: MaritimeVessel | null;
-  onSelectVessel?: (vessel: MaritimeVessel | null) => void;
-  milFlights?: MilitaryFlight[];
-  earthquakes?: SeismicEvent[];
+  onOpenAgriModal?: () => void;
+  vessels?: any[];
+  selectedVessel?: any | null;
+  onSelectVessel?: (vessel: any | null) => void;
+  milFlights?: any[];
+  earthquakes?: any[];
   onClose?: () => void;
-  activeTab?: 'oracle' | 'weather' | 'airspace' | 'seismic';
-  onChangeTab?: (tab: 'oracle' | 'weather' | 'airspace' | 'seismic') => void;
+  activeTab?: RightPanelTab;
+  onChangeTab?: (tab: RightPanelTab) => void;
+  onFlyToCoord?: (coords: [number, number], zoom?: number) => void;
+  isDroughtLayerActive?: boolean;
+  onToggleDroughtLayer?: () => void;
 }
 
 export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   weather,
   riverGauges,
   flights,
-  selectedFlight,
-  onSelectFlight,
   onOpenAgriModal,
-  vessels = [],
-  selectedVessel = null,
-  onSelectVessel,
-  milFlights = [],
-  earthquakes = [],
   onClose,
   activeTab: controlledTab,
   onChangeTab,
+  onFlyToCoord,
+  isDroughtLayerActive = false,
+  onToggleDroughtLayer,
 }) => {
-  const [internalTab, setInternalTab] = useState<'oracle' | 'weather' | 'airspace' | 'seismic'>('weather');
+  const [internalTab, setInternalTab] = useState<RightPanelTab>('agri');
   const currentTab = controlledTab ?? internalTab;
-  const setTab = onChangeTab ?? setInternalTab;
+  const setTab = (t: RightPanelTab) => {
+    if (onChangeTab) onChangeTab(t);
+    else setInternalTab(t);
+  };
 
-  const mainGauge = riverGauges.find((g) => g.stationId === '02FE003') || riverGauges[0];
-  const orngeFlight = flights.find((f) => f.callsign.includes('ORNGE') || f.callsign.includes('MEDEVAC'));
+  // Agronomic live data states
+  const [soil, setSoil] = useState<SoilTelemetry | null>(null);
+  const [commodities, setCommodities] = useState<CommodityFuture[]>([]);
+  const [chuData, setChuData] = useState<ChuSeasonSummary | null>(null);
+  const [usdCadRate, setUsdCadRate] = useState<number>(1.40);
+  const [plantingDate, setPlantingDate] = useState<string>('2024-05-01');
 
+  // Calculator states
+  const [selectedCrop, setSelectedCrop] = useState<'corn' | 'soy' | 'wheat'>('corn');
+  const [selectedElevator, setSelectedElevator] = useState<OntarioElevatorPreset>(ONTARIO_ELEVATOR_PRESETS[0]);
+  const [fieldAcres, setFieldAcres] = useState<number>(100);
+  const [fieldYield, setFieldYield] = useState<number>(195); // bu/acre
+
+  const [isLoadingAgri, setIsLoadingAgri] = useState<boolean>(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setIsLoadingAgri(true);
+
+    Promise.allSettled([
+      fetchLiveSoilTelemetry(),
+      fetchLiveCommodities(),
+      fetchLiveChuData(plantingDate),
+      fetchLiveUsdCadRate(),
+    ]).then(([soilRes, commRes, chuRes, fxRes]) => {
+      if (!mounted) return;
+      if (soilRes.status === 'fulfilled' && soilRes.value) setSoil(soilRes.value);
+      if (commRes.status === 'fulfilled' && commRes.value) setCommodities(commRes.value);
+      if (chuRes.status === 'fulfilled' && chuRes.value) setChuData(chuRes.value);
+      if (fxRes.status === 'fulfilled' && fxRes.value) setUsdCadRate(fxRes.value);
+      setIsLoadingAgri(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [plantingDate]);
+
+  const temp = weather?.temperatureC ?? 16;
+  const rh = weather?.humidityPercent ?? 55;
+  const wind = weather?.windSpeedKmh ?? 14;
+
+  const sprayInfo: SprayCondition = calculateSprayWindow(temp, rh, wind);
+  const dairyStress: LivestockStressTelemetry = calculateDairyHeatStress(temp, rh);
+  const burnStatus = getBurnPermitStatus();
   const mvca = getMvcaWatershedBulletin(riverGauges);
   const weatherAlerts = getWeatherAlerts(weather);
 
+  // Commodity futures lookup
+  const cornFuture = commodities.find((c) => c.symbol === 'ZC=F');
+  const soyFuture = commodities.find((c) => c.symbol === 'ZS=F');
+  const wheatFuture = commodities.find((c) => c.symbol === 'ZW=F');
+  const cattleFuture = commodities.find((c) => c.symbol === 'LE=F');
+  const hogFuture = commodities.find((c) => c.symbol === 'HE=F');
+
+  const activeCbotPrice =
+    selectedCrop === 'corn'
+      ? (cornFuture?.price ?? 4.45)
+      : selectedCrop === 'soy'
+      ? (soyFuture?.price ?? 10.25)
+      : (wheatFuture?.price ?? 5.75);
+
+  const activeBasis =
+    selectedCrop === 'corn'
+      ? selectedElevator.cornBasisCad
+      : selectedCrop === 'soy'
+      ? selectedElevator.soybeanBasisCad
+      : selectedElevator.wheatBasisCad;
+
+  const buPerTonne = selectedCrop === 'corn' ? 39.368 : selectedCrop === 'soy' ? 36.744 : 36.744;
+  const cashPricing = calculateCashGrain(activeCbotPrice, activeBasis, usdCadRate, buPerTonne);
+  const estimatedTotalBushels = fieldAcres * fieldYield;
+  const estimatedRevenueCad = Math.round(estimatedTotalBushels * cashPricing.cashCadPerBu);
+
   return (
-    <aside className="w-72 sm:w-84 flex-shrink-0 flex flex-col bg-slate-950/95 border-l border-cyan-500/20 backdrop-blur-md overflow-hidden z-20 shadow-2xl">
-      {/* Header with Close / Hide Button */}
-      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-cyan-500/20 bg-slate-950">
-        <span className="font-tactical text-[10px] font-bold text-cyan-400 tracking-wider">
-          INTEL & METEOROLOGY
-        </span>
+    <aside className="w-80 sm:w-96 flex-shrink-0 flex flex-col bg-slate-950/95 border-l border-emerald-500/25 backdrop-blur-md overflow-hidden z-20 shadow-2xl">
+      {/* Header with Title and Close Button */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-emerald-500/20 bg-slate-950">
+        <div className="flex items-center gap-2">
+          <Sprout className="w-4 h-4 text-emerald-400" />
+          <span className="font-tactical text-xs font-bold text-emerald-400 tracking-wider">
+            AGRI-OPERATIONS // PERTH COUNTY
+          </span>
+        </div>
         {onClose && (
           <button
             onClick={onClose}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer text-[9px] font-mono transition-colors"
-            title="Collapse Sidebar (Full Map View)"
+            title="Collapse Sidebar"
           >
             <span>HIDE</span>
             <X className="w-3 h-3" />
@@ -99,86 +195,465 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center border-b border-cyan-500/20 bg-slate-900/50">
+      <div className="flex items-center border-b border-emerald-500/20 bg-slate-900/60 font-tactical text-[10px]">
+        <button
+          onClick={() => setTab('agri')}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+            currentTab === 'agri'
+              ? 'border-emerald-400 text-emerald-300 bg-slate-900/90 shadow-[inset_0_-2px_6px_rgba(16,185,129,0.2)]'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Sprout className="w-3.5 h-3.5 text-emerald-400" />
+          AGRI & SOIL
+        </button>
+
+        <button
+          onClick={() => setTab('markets')}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+            currentTab === 'markets'
+              ? 'border-amber-400 text-amber-300 bg-slate-900/90 shadow-[inset_0_-2px_6px_rgba(245,158,11,0.2)]'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Wheat className="w-3.5 h-3.5 text-amber-400" />
+          GRAIN BIDS
+        </button>
+
         <button
           onClick={() => setTab('weather')}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
             currentTab === 'weather'
-              ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
+              ? 'border-cyan-400 text-cyan-300 bg-slate-900/90 shadow-[inset_0_-2px_6px_rgba(6,182,212,0.2)]'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <CloudSun className="w-3 h-3" />
-          WEATHER {weather ? `(${weather.temperatureC}°)` : ''}
+          <CloudSun className="w-3.5 h-3.5 text-cyan-400" />
+          WEATHER
         </button>
+
         <button
-          onClick={() => setTab('oracle')}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            currentTab === 'oracle'
-              ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
+          onClick={() => setTab('hubs')}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
+            currentTab === 'hubs'
+              ? 'border-indigo-400 text-indigo-300 bg-slate-900/90 shadow-[inset_0_-2px_6px_rgba(99,102,241,0.2)]'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Sparkles className="w-3 h-3" />
-          SITREP
-        </button>
-        <button
-          onClick={() => setTab('airspace')}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            currentTab === 'airspace'
-              ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Plane className="w-3 h-3" />
-          AIR ({flights.length + milFlights.length})
-        </button>
-        <button
-          onClick={() => setTab('seismic')}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 text-[10px] font-tactical font-semibold tracking-wider transition-colors border-b-2 cursor-pointer ${
-            currentTab === 'seismic'
-              ? 'border-cyan-400 text-cyan-400 bg-slate-900/80'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Activity className="w-3 h-3" />
-          SEISMIC ({earthquakes.length})
+          <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+          AG HUBS
         </button>
       </div>
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 font-mono text-xs">
-        {/* TAB 1: AI SITREP (PYTHIA ORACLE) */}
-        {currentTab === 'oracle' && (
+        {/* ========================================================================= */}
+        {/* TAB 1: AGRI & SOIL (SPRAY, SOIL PHYSICS, DAIRY HEAT STRESS, CHU) */}
+        {/* ========================================================================= */}
+        {currentTab === 'agri' && (
           <div className="space-y-3">
-            {/* Ornge Medevac Priority Banner if detected */}
-            {orngeFlight && (
-              <div className="p-2.5 rounded bg-rose-950/70 border border-rose-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse">
-                <div className="flex items-center justify-between text-xs font-bold text-rose-300">
-                  <span className="flex items-center gap-1.5">
-                    <HeartPulse className="w-4 h-4 text-rose-400" />
-                    ORNGE MEDEVAC INBOUND // LMH
-                  </span>
-                  <span className="text-[10px] bg-rose-900 px-1.5 py-0.5 rounded text-white font-bold">
-                    {orngeFlight.distanceKmToListowel} km out
-                  </span>
+            {/* 1. Delta-T & Chemical Spray Window */}
+            <div className="p-3 rounded bg-slate-900/90 border border-emerald-500/40 shadow-sm space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-white">
+                  <Wind className="w-3.5 h-3.5 text-emerald-400" />
+                  DELTA-T SPRAY WINDOW
+                </span>
+                <span
+                  className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                    sprayInfo.status === 'OPTIMAL'
+                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                      : sprayInfo.status === 'DRIFT_RISK' || sprayInfo.status === 'INVERSION_RISK'
+                      ? 'bg-rose-950/90 text-rose-300 border-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse'
+                      : 'bg-amber-950/90 text-amber-300 border-amber-500'
+                  }`}
+                >
+                  {sprayInfo.status.replace('_', ' ')}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between bg-slate-950/70 p-2 rounded border border-slate-800">
+                <div>
+                  <div className="text-[10px] text-slate-400">WET-BULB DEPRESSION (ΔT)</div>
+                  <div className="text-xl font-bold font-mono text-emerald-400">
+                    {sprayInfo.deltaTCelsius}°C
+                  </div>
                 </div>
-                <div className="text-[10px] text-slate-300 mt-1">
-                  Air Ambulance {orngeFlight.callsign} entering North Perth airspace. Listowel Memorial Hospital (CPN5) helipad active.
+                <div className="text-right text-[10px] space-y-0.5">
+                  <div className="text-slate-300">
+                    Wind: <span className="text-white font-bold">{wind} km/h</span>
+                  </div>
+                  <div className="text-slate-300">
+                    Humidity: <span className="text-white font-bold">{rh}%</span>
+                  </div>
+                  <div className="text-slate-300">
+                    Ambient: <span className="text-white font-bold">{temp}°C</span>
+                  </div>
                 </div>
               </div>
-            )}
 
-            {/* Weather Alert Card */}
+              <div className="text-[10px] text-slate-300 leading-relaxed bg-emerald-950/20 p-2 rounded border border-emerald-500/20">
+                {sprayInfo.recommendation}
+              </div>
+            </div>
+
+            {/* 2. Dairy & Livestock Heat Stress (THI) */}
+            <div className="p-3 rounded bg-slate-900/90 border border-blue-500/40 shadow-sm space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-white">
+                  <Beef className="w-3.5 h-3.5 text-blue-400" />
+                  DAIRY & LIVESTOCK THI
+                </span>
+                <span
+                  className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                    dairyStress.level === 'COMFORT'
+                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500'
+                      : dairyStress.level === 'MILD_STRESS'
+                      ? 'bg-amber-950/90 text-amber-300 border-amber-500'
+                      : 'bg-rose-950/90 text-rose-300 border-rose-500 animate-pulse'
+                  }`}
+                >
+                  THI {dairyStress.thi} // {dairyStress.label}
+                </span>
+              </div>
+
+              <div className="text-[10px] space-y-1 bg-slate-950/60 p-2 rounded border border-slate-800">
+                <div className="text-slate-200">
+                  <span className="text-blue-300 font-semibold">Milk Yield Impact:</span>{' '}
+                  {dairyStress.milkYieldImpact}
+                </div>
+                <div className="text-slate-300 text-[9px] leading-relaxed">
+                  <span className="text-slate-400 font-semibold">Barn Protocol:</span>{' '}
+                  {dairyStress.barnVentilationAdvice}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Soil Physics & Moisture Telemetry */}
+            <div className="p-3 rounded bg-slate-900/90 border border-amber-500/40 shadow-sm space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-white">
+                  <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+                  SEEDBED & SOIL PHYSICS
+                </span>
+                <span className="text-[9px] text-amber-400 font-mono">LISTOWEL / ELMA</span>
+              </div>
+
+              {soil ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    <div className="bg-slate-950/80 p-1.5 rounded border border-slate-800">
+                      <div className="text-[9px] text-slate-400">SURFACE (0cm)</div>
+                      <div className="text-sm font-bold text-amber-300">{soil.soilTemp0cm}°C</div>
+                    </div>
+                    <div className="bg-slate-950/80 p-1.5 rounded border border-emerald-500/40">
+                      <div className="text-[9px] text-emerald-400 font-semibold">SEEDBED (6cm)</div>
+                      <div className="text-sm font-bold text-emerald-300">{soil.soilTemp6cm}°C</div>
+                    </div>
+                    <div className="bg-slate-950/80 p-1.5 rounded border border-slate-800">
+                      <div className="text-[9px] text-slate-400">ROOTS (18cm)</div>
+                      <div className="text-sm font-bold text-amber-300">{soil.soilTemp18cm}°C</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800 space-y-1.5 text-[10px]">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span>Topsoil Moisture (0-1cm):</span>
+                      <span className="font-bold text-white">{soil.soilMoisture0to1cm}% vol</span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-1.5">
+                      <div
+                        className="bg-cyan-400 h-1.5 rounded-full"
+                        style={{ width: `${Math.min(100, soil.soilMoisture0to1cm * 2)}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-300 pt-1">
+                      <span>Seedbed Moisture (1-3cm):</span>
+                      <span className="font-bold text-emerald-400">{soil.soilMoisture1to3cm}% vol</span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-1.5">
+                      <div
+                        className="bg-emerald-400 h-1.5 rounded-full"
+                        style={{ width: `${Math.min(100, soil.soilMoisture1to3cm * 2)}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-400 pt-1 text-[9px]">
+                      <span>VPD: {soil.vpdKpa} kPa</span>
+                      <span>FAO-56 ET₀: {soil.et0Mm} mm/day</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-2 text-slate-500 text-[10px] animate-pulse">
+                  Querying Open-Meteo Perth soil probes...
+                </div>
+              )}
+            </div>
+
+            {/* 4. Ontario Crop Heat Units (CHU) */}
+            <div className="p-3 rounded bg-slate-900/90 border border-emerald-500/40 shadow-sm space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-white">
+                  <Sun className="w-3.5 h-3.5 text-yellow-400" />
+                  ONTARIO CROP HEAT UNITS (CHU)
+                </span>
+                <span className="text-[9px] text-emerald-400 font-bold">2,850 TARGET</span>
+              </div>
+
+              {chuData ? (
+                <div className="space-y-2 text-[10px]">
+                  <div className="flex items-center justify-between bg-slate-950/70 p-2 rounded border border-slate-800">
+                    <div>
+                      <div className="text-[9px] text-slate-400">ACCUMULATED CHU</div>
+                      <div className="text-lg font-bold text-yellow-400">
+                        {chuData.accumulatedChu}{' '}
+                        <span className="text-[10px] text-slate-400 font-normal">/ 2,850</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[9px] text-slate-400">MATURITY</div>
+                      <div className="text-lg font-bold text-emerald-400">
+                        {chuData.percentMaturity}%
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="w-full bg-slate-800 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-emerald-500 to-yellow-400 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${chuData.percentMaturity}%` }}
+                    ></div>
+                  </div>
+
+                  <div className="bg-slate-950/60 p-2 rounded border border-slate-800 space-y-0.5 text-[9px]">
+                    <div className="text-white font-bold">{chuData.cropPhase}</div>
+                    <div className="text-slate-300">{chuData.phaseDescription}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-2 text-slate-500 text-[10px] animate-pulse">
+                  Calculating regional CHU thermal history...
+                </div>
+              )}
+            </div>
+
+            {/* 5. AAFC Canadian Drought Monitor Toggle */}
+            <div className="p-2.5 rounded bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+              <div className="text-[10px]">
+                <div className="text-white font-semibold">AAFC Drought Monitor Overlay</div>
+                <div className="text-slate-400 text-[9px]">Agriculture Canada soil deficit map</div>
+              </div>
+              {onToggleDroughtLayer && (
+                <button
+                  onClick={onToggleDroughtLayer}
+                  className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                    isDroughtLayerActive
+                      ? 'bg-amber-500 text-slate-950 shadow-[0_0_8px_#f59e0b]'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  {isDroughtLayerActive ? 'ACTIVE' : 'ENABLE'}
+                </button>
+              )}
+            </div>
+
+            {/* 6. Rural Open-Air Burn Permits */}
+            <div className="p-2.5 rounded bg-slate-900/90 border border-slate-800 flex items-center justify-between text-[10px]">
+              <div className="flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-slate-200">Rural Burn Permits (Elma & Wallace):</span>
+              </div>
+              <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">
+                PERMITTED
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: GRAIN MARKETS & LOCAL ELEVATOR CASH BIDS */}
+        {/* ========================================================================= */}
+        {currentTab === 'markets' && (
+          <div className="space-y-3">
+            {/* Currency FX Benchmark */}
+            <div className="flex items-center justify-between p-2 rounded bg-slate-900/80 border border-slate-800 text-[10px]">
+              <span className="text-slate-400">BANK OF CANADA FX BENCHMARK:</span>
+              <span className="font-bold text-emerald-400 font-mono">
+                1 USD = ${usdCadRate.toFixed(4)} CAD
+              </span>
+            </div>
+
+            {/* Local Elevator Cash Grain Calculator */}
+            <div className="p-3 rounded bg-slate-900/90 border border-amber-500/40 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-white">
+                  <Scale className="w-3.5 h-3.5 text-amber-400" />
+                  ONTARIO ELEVATOR CASH BIDS
+                </span>
+                <span className="text-[9px] text-amber-300 font-mono">CAD / BU & TONNE</span>
+              </div>
+
+              {/* Crop Selector */}
+              <div className="flex rounded border border-slate-800 overflow-hidden text-[10px] bg-slate-950">
+                <button
+                  onClick={() => setSelectedCrop('corn')}
+                  className={`flex-1 py-1 font-bold transition-colors cursor-pointer ${
+                    selectedCrop === 'corn' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  CORN
+                </button>
+                <button
+                  onClick={() => setSelectedCrop('soy')}
+                  className={`flex-1 py-1 font-bold transition-colors cursor-pointer ${
+                    selectedCrop === 'soy' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  SOYBEANS
+                </button>
+                <button
+                  onClick={() => setSelectedCrop('wheat')}
+                  className={`flex-1 py-1 font-bold transition-colors cursor-pointer ${
+                    selectedCrop === 'wheat' ? 'bg-yellow-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  SRW WHEAT
+                </button>
+              </div>
+
+              {/* Elevator Selection */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-wider">Select Elevator Terminal:</label>
+                <select
+                  value={selectedElevator.name}
+                  onChange={(e) => {
+                    const found = ONTARIO_ELEVATOR_PRESETS.find((p) => p.name === e.target.value);
+                    if (found) setSelectedElevator(found);
+                  }}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 font-mono focus:outline-none cursor-pointer"
+                >
+                  {ONTARIO_ELEVATOR_PRESETS.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name} ({p.location})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Price Calculation Output */}
+              <div className="p-2.5 rounded bg-slate-950/90 border border-emerald-500/30 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">CBOT Futures (USD):</span>
+                  <span className="font-bold text-white font-mono">${activeCbotPrice.toFixed(2)} / bu</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">Elevator Basis (CAD):</span>
+                  <span className="font-bold text-amber-300 font-mono">+${activeBasis.toFixed(2)} / bu</span>
+                </div>
+                <div className="border-t border-slate-800 pt-1.5 flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400">EST. CASH PRICE:</span>
+                  <div className="text-right">
+                    <span className="text-base font-bold text-emerald-300 font-mono">
+                      ${cashPricing.cashCadPerBu.toFixed(2)}{' '}
+                      <span className="text-[10px] text-slate-400 font-normal">CAD/bu</span>
+                    </span>
+                    <div className="text-[9px] text-slate-400">
+                      ${cashPricing.cashCadPerTonne.toFixed(2)} CAD/tonne
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Field Revenue Estimator */}
+              <div className="p-2 rounded bg-slate-950/70 border border-slate-800 space-y-1.5 text-[10px]">
+                <div className="flex items-center justify-between font-bold text-slate-300">
+                  <span>Field Revenue Estimator</span>
+                  <span className="text-emerald-400 font-mono">${estimatedRevenueCad.toLocaleString()} CAD</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[9px]">
+                  <div>
+                    <label className="text-slate-400">Acres:</label>
+                    <input
+                      type="number"
+                      value={fieldAcres}
+                      onChange={(e) => setFieldAcres(Math.max(1, Number(e.target.value)))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400">Est. Yield (bu/ac):</label>
+                    <input
+                      type="number"
+                      value={fieldYield}
+                      onChange={(e) => setFieldYield(Math.max(1, Number(e.target.value)))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live CBOT / CME Commodity Futures */}
+            <div className="p-3 rounded bg-slate-900/90 border border-slate-800 shadow-sm space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                  CBOT / CME AGRICULTURAL FUTURES
+                </span>
+                <span className="text-[9px] text-slate-400">LIVE TICKER</span>
+              </div>
+
+              <div className="space-y-1.5">
+                {commodities.length > 0 ? (
+                  commodities.map((c) => (
+                    <div
+                      key={c.symbol}
+                      className="flex items-center justify-between p-1.5 rounded bg-slate-950/70 border border-slate-800 text-[10px]"
+                    >
+                      <div>
+                        <div className="text-white font-bold">{c.name}</div>
+                        <div className="text-[9px] text-slate-400">{c.exchange}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-slate-200 font-mono">
+                          ${c.price.toFixed(2)} <span className="text-[9px] text-slate-400">{c.unit}</span>
+                        </div>
+                        <div
+                          className={`text-[9px] font-mono font-semibold ${
+                            c.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          {c.changePercent >= 0 ? '+' : ''}
+                          {c.changePercent.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-2 text-slate-500 text-[10px]">
+                    Updating CME agricultural futures...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: LOCAL WEATHER & MAITLAND RIVER DRAINAGE */}
+        {/* ========================================================================= */}
+        {currentTab === 'weather' && (
+          <div className="space-y-3">
+            {/* Weather Alerts if any */}
             {weatherAlerts.map((alert) => (
               <div
                 key={alert.id}
                 className={`p-2.5 rounded border ${
                   alert.severity === 'CRITICAL'
                     ? 'bg-rose-950/60 border-rose-500/80 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.3)] animate-pulse'
-                    : alert.severity === 'ELEVATED'
-                    ? 'bg-amber-950/50 border-amber-500/70 text-amber-200'
-                    : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                    : 'bg-amber-950/50 border-amber-500/70 text-amber-200'
                 }`}
               >
                 <div className="flex items-center justify-between font-bold text-[11px] mb-1">
@@ -194,38 +669,58 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               </div>
             ))}
 
-            {/* MVCA Maitland Valley Watershed Bulletin */}
-            <div className="p-3 rounded bg-slate-900/80 border border-cyan-500/40 shadow-sm space-y-2">
+            {/* Current Conditions Card */}
+            {weather && (
+              <div className="p-3 rounded bg-slate-900/90 border border-cyan-500/40 shadow-sm space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <CloudSun className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-bold text-white">NORTH PERTH METEOROLOGY</span>
+                  </div>
+                  <span className="text-xs font-bold text-cyan-300 font-mono">{weather.temperatureC}°C</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                    <div className="text-slate-400">Wind & Gusts</div>
+                    <div className="font-bold text-white font-mono">
+                      {weather.windSpeedKmh} km/h (Gusts {weather.windGustsKmh} km/h)
+                    </div>
+                  </div>
+                  <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                    <div className="text-slate-400">Humidity & Dewpoint</div>
+                    <div className="font-bold text-white font-mono">{weather.humidityPercent}%</div>
+                  </div>
+                  <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                    <div className="text-slate-400">Barometer</div>
+                    <div className="font-bold text-white font-mono">{weather.barometricPressureHpa} hPa</div>
+                  </div>
+                  <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                    <div className="text-slate-400">Condition</div>
+                    <div className="font-bold text-cyan-300">{weather.conditionLabel}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Maitland Valley Watershed & Tile Drainage Gauge */}
+            <div className="p-3 rounded bg-slate-900/90 border border-cyan-500/40 shadow-sm space-y-2">
               <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-white">
                   <Waves className="w-3.5 h-3.5 text-cyan-400" />
                   <span>MAITLAND VALLEY (MVCA)</span>
                 </div>
-                <span
-                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                    mvca.status === 'FLOOD_WARNING'
-                      ? 'bg-rose-950 text-rose-400 border-rose-500 animate-pulse'
-                      : mvca.status === 'FLOOD_WATCH'
-                      ? 'bg-amber-950 text-amber-400 border-amber-500 animate-pulse'
-                      : mvca.status === 'CONDITIONS_STATEMENT'
-                      ? 'bg-yellow-950 text-yellow-300 border-yellow-500/60'
-                      : 'bg-emerald-950 text-emerald-400 border-emerald-500/40'
-                  }`}
-                >
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-emerald-950 text-emerald-400 border-emerald-500/40">
                   {mvca.status.replace('_', ' ')}
                 </span>
               </div>
               <div className="text-[11px] font-semibold text-cyan-300">{mvca.headline}</div>
               <p className="text-[10px] text-slate-300 leading-relaxed">{mvca.details}</p>
-              
-              {/* Real-time Environment Canada hydrometric stations */}
+
+              {/* Water Levels for drainage monitoring */}
               <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[10px]">
-                <div className="text-slate-400 font-semibold text-[9px] uppercase tracking-wider flex items-center justify-between">
-                  <span>LIVE ECCC WATEROFFICE TELEMETRY</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    ACTIVE
-                  </span>
+                <div className="text-slate-400 font-semibold text-[9px] uppercase tracking-wider">
+                  FIELD RUNOFF & GAUGES
                 </div>
                 {riverGauges.map((g) => (
                   <div key={g.stationId} className="flex items-center justify-between p-1.5 rounded bg-slate-950/60 border border-slate-800">
@@ -239,493 +734,57 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                 ))}
               </div>
             </div>
-
-            {/* Quick Action Button for Agri & Economic Intel */}
-            <button
-              onClick={onOpenAgriModal}
-              className="w-full flex items-center justify-between p-2.5 rounded bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-semibold cursor-pointer transition-all shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <Sprout className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs">AGRONOMY // LIVE DELTA-T SPRAY WINDOW</span>
-              </div>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-
-            {/* Live Synthesis Telemetry Grid */}
-            <div className="space-y-2">
-              <div className="text-[10px] font-tactical tracking-wider text-cyan-400 flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5" />
-                TACTICAL SECTOR SUMMARY (LIVE TELEMETRY)
-              </div>
-
-              {/* Weather & Atmosphere */}
-              <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-semibold text-cyan-300">Surface Atmosphere</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">LIVE ECCC/METEO</span>
-                </div>
-                <p className="text-[10px] text-slate-300 leading-normal">
-                  Listowel station reporting {weather?.temperatureC ?? '--'}°C (feels like {weather?.apparentTempC ?? '--'}°C), {weather?.humidityPercent ?? '--'}% humidity. Barometer: {weather?.barometricPressureHpa ?? '--'} hPa. Winds: {weather?.windSpeedKmh ?? '--'} km/h with peak gusts to {weather?.windGustsKmh ?? '--'} km/h.
-                </p>
-              </div>
-
-              {/* Hydrology & River Flow */}
-              <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-semibold text-emerald-300">Maitland Watershed Status</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">LIVE 02FE003</span>
-                </div>
-                <p className="text-[10px] text-slate-300 leading-normal">
-                  Middle Maitland River gauge near Listowel recording {mainGauge?.waterLevelMeters.toFixed(2) ?? '6.80'}m at {mainGauge?.dischargeM3s.toFixed(2) ?? '0.16'} m³/s. River stage is {mainGauge?.floodStageAlert ?? 'NORMAL'} with a {mainGauge?.trend.toLowerCase() ?? 'stable'} baseflow trend.
-                </p>
-              </div>
-
-              {/* Airspace & Transport Corridors */}
-              <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-semibold text-cyan-300">Overhead Airspace</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">LIVE ADS-B MESH</span>
-                </div>
-                <p className="text-[10px] text-slate-300 leading-normal">
-                  {flights.length + milFlights.length} transponder aircraft tracked across Southwestern Ontario airspace ({flights.length} civilian, {milFlights.length} military).
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <div className="p-2 rounded bg-slate-900/50 border border-slate-800">
-                <span className="text-[10px] text-slate-400">TEMP / APPARENT</span>
-                <div className="text-sm font-bold text-white">
-                  {weather?.temperatureC}°C <span className="text-[11px] text-slate-400">({weather?.apparentTempC}°C)</span>
-                </div>
-              </div>
-              <div className="p-2 rounded bg-slate-900/50 border border-slate-800">
-                <span className="text-[10px] text-slate-400">WIND GUSTS</span>
-                <div className="text-sm font-bold text-cyan-300">
-                  {weather?.windGustsKmh} km/h
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
-        {/* TAB 2: WEATHER & RADAR METEOROLOGY */}
-        {currentTab === 'weather' && (
-          <div className="space-y-3">
-            {/* Header / Current Station */}
-            <div className="p-3 rounded bg-slate-900/80 border border-cyan-500/40 shadow-sm space-y-2.5">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-xs text-white">
-                  <CloudSun className="w-4 h-4 text-cyan-400" />
-                  <span>NORTH PERTH METEOROLOGY</span>
-                </div>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  LIVE
-                </span>
-              </div>
-
-              {/* Big Temp & Condition */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-3xl font-tactical font-black text-white tracking-tight">
-                    {weather?.temperatureC ?? '--'}°C
-                  </div>
-                  <div className="text-[11px] text-slate-300 flex items-center gap-1 mt-0.5 font-semibold">
-                    <span>{weather?.conditionLabel ?? 'Stable Atmosphere'}</span>
-                    <span className="text-slate-500">•</span>
-                    <span className="text-slate-400">Feels {weather?.apparentTempC ?? '--'}°C</span>
-                  </div>
-                </div>
-                {weather?.dailyForecast?.[0] && (
-                  <div className="text-right text-[11px] font-mono bg-slate-950/70 p-1.5 rounded border border-slate-800">
-                    <div className="text-rose-400 font-bold">▲ {weather.dailyForecast[0].tempMaxC}°C</div>
-                    <div className="text-cyan-400 font-bold">▼ {weather.dailyForecast[0].tempMinC}°C</div>
-                  </div>
-                )}
-              </div>
-
-              {/* 4-Grid Meteorological Telemetry */}
-              <div className="grid grid-cols-2 gap-1.5 pt-1 text-[10px]">
-                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Wind className="w-3 h-3 text-cyan-400" />
-                    SURFACE WINDS
-                  </span>
-                  <div className="text-xs font-bold text-white mt-0.5">
-                    {weather?.windSpeedKmh ?? '--'} km/h <span className="text-slate-400 text-[10px]">({weather?.windDirectionDeg ?? 0}°)</span>
-                  </div>
-                  <div className="text-[9px] text-amber-300/90 mt-0.5">
-                    Gusts to {weather?.windGustsKmh ?? '--'} km/h
-                  </div>
-                </div>
-
-                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Droplets className="w-3 h-3 text-cyan-400" />
-                    HUMIDITY
-                  </span>
-                  <div className="text-xs font-bold text-white mt-0.5">
-                    {weather?.humidityPercent ?? '--'}%
-                  </div>
-                  <div className="text-[9px] text-slate-400 mt-0.5">
-                    Cloud Cover: {weather?.cloudCoverPercent ?? 0}%
-                  </div>
-                </div>
-
-                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Gauge className="w-3 h-3 text-cyan-400" />
-                    BAROMETER
-                  </span>
-                  <div className="text-xs font-bold text-white mt-0.5">
-                    {weather?.barometricPressureHpa ?? '--'} hPa
-                  </div>
-                  <div className="text-[9px] text-emerald-400 mt-0.5">
-                    {((weather?.barometricPressureHpa ?? 1013) >= 1013) ? 'High Pressure' : 'Low Pressure System'}
-                  </div>
-                </div>
-
-                <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <CloudRain className="w-3 h-3 text-cyan-400" />
-                    PRECIPITATION
-                  </span>
-                  <div className="text-xs font-bold text-white mt-0.5">
-                    {weather?.weatherCode === 0 ? '0.0 mm/h' : 'Active'}
-                  </div>
-                  <div className="text-[9px] text-slate-400 mt-0.5">
-                    {weather?.weatherCode === 0 ? 'Clear Skies' : weather?.conditionLabel}
-                  </div>
-                </div>
-              </div>
+        {/* ========================================================================= */}
+        {/* TAB 4: NORTH PERTH AGRI HUBS & INFRASTRUCTURE */}
+        {/* ========================================================================= */}
+        {currentTab === 'hubs' && (
+          <div className="space-y-2.5">
+            <div className="text-[10px] text-slate-400 px-1">
+              Agricultural elevators, feed mills, livestock auction, and agronomy centers in North Perth:
             </div>
 
-            {/* Doppler Weather Radar Status Card */}
-            <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-cyan-300">
-                <span className="flex items-center gap-1.5">
-                  <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
-                  DOPPLER RADAR NETWORK
-                </span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-500/40">
-                  EXETER WSO MESH
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-300 leading-relaxed">
-                Continuous high-resolution Doppler reflectivity loop buffered from Exeter (WSO) and Great Lakes composite radar.
-              </p>
-              <div className="p-2 rounded bg-slate-950/80 border border-slate-800 text-[10px] space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">North Perth Status:</span>
-                  <span className="text-emerald-400 font-bold">0.0 mm/h (Zero Radar Echoes)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Precipitation Buffer:</span>
-                  <span className="text-cyan-300 font-mono">13 Frames Pre-Buffered (Auto-Loop)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Next 12 Hours Forecast Timeline */}
-            {weather?.hourlyForecast && weather.hourlyForecast.length > 0 && (
-              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-cyan-400" />
-                  NEXT 12 HOURS FORECAST
-                </div>
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-                  {weather.hourlyForecast.map((h, i) => (
-                    <div
-                      key={i}
-                      className="flex-shrink-0 flex flex-col items-center p-1.5 rounded bg-slate-950/80 border border-slate-800/80 min-w-[50px] text-center"
-                    >
-                      <span className="text-[9px] text-slate-400">{h.time}</span>
-                      <span className="text-[11px] font-bold text-white my-0.5">{h.tempC}°</span>
-                      <span className={`text-[8px] font-bold ${h.precipProb > 30 ? 'text-cyan-400' : 'text-slate-500'}`}>
-                        {h.precipProb}% rain
-                      </span>
+            {NORTH_PERTH_AGRI_HUBS.map((hub) => (
+              <div
+                key={hub.id}
+                className="p-2.5 rounded bg-slate-900/90 border border-slate-800 hover:border-emerald-500/50 transition-colors space-y-1.5"
+              >
+                <div className="flex items-start justify-between gap-1">
+                  <div>
+                    <div className="text-white font-bold text-[11px]">{hub.name}</div>
+                    <div className="text-[9px] text-emerald-400 font-mono">
+                      {hub.category.replace('_', ' ')} // {hub.town}
                     </div>
+                  </div>
+                  {onFlyToCoord && (
+                    <button
+                      onClick={() => onFlyToCoord([hub.lat, hub.lng], 14)}
+                      className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-[9px] font-bold cursor-pointer transition-colors"
+                      title="Zoom to location on map"
+                    >
+                      LOCATE
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[9px] text-slate-300 leading-relaxed">{hub.description}</p>
+
+                <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-800/80">
+                  {hub.services.map((svc) => (
+                    <span
+                      key={svc}
+                      className="text-[8px] px-1.5 py-0.2 rounded bg-slate-950 text-slate-300 border border-slate-800 font-mono"
+                    >
+                      {svc}
+                    </span>
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* 3-Day Outlook */}
-            {weather?.dailyForecast && weather.dailyForecast.length > 0 && (
-              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
-                  <Sun className="w-3 h-3 text-cyan-400" />
-                  3-DAY METEOROLOGICAL OUTLOOK
-                </div>
-                <div className="space-y-1.5">
-                  {weather.dailyForecast.map((day, i) => {
-                    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : day.date.substring(5);
-                    return (
-                      <div
-                        key={day.date}
-                        className="flex items-center justify-between p-2 rounded bg-slate-950/60 border border-slate-800 text-[10px]"
-                      >
-                        <span className="font-semibold text-slate-200 w-16">{label}</span>
-                        <span className="text-slate-400 truncate flex-1 px-2">{day.conditionLabel}</span>
-                        <div className="font-mono text-right flex items-center gap-2">
-                          <span className="text-rose-400 font-bold">{day.tempMaxC}°</span>
-                          <span className="text-cyan-400 font-bold">{day.tempMinC}°</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            ))}
           </div>
         )}
-
-        {/* TAB 3: AIRSPACE (ADS-B LIVE RADAR) */}
-        {currentTab === 'airspace' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">LIVE ADS-B RADAR</span>
-              </span>
-              <span className="text-[10px] font-mono text-cyan-400">{flights.length} DETECTED</span>
-            </div>
-
-            {flights.length === 0 ? (
-              <div className="p-5 rounded border border-slate-800 bg-slate-900/40 text-center text-slate-400 text-xs space-y-1.5">
-                <Plane className="w-6 h-6 mx-auto text-slate-600 mb-1" />
-                <div className="font-semibold text-slate-300">NO TRANSPONDERS IN RANGE</div>
-                <div className="text-[10px] text-slate-500">Live receiver mesh listening (70 NM around Listowel)...</div>
-              </div>
-            ) : (
-              flights.map((flight) => {
-                const isSelected = selectedFlight?.icao24 === flight.icao24;
-                const isOrnge = flight.callsign.includes('ORNGE') || flight.callsign.includes('MEDEVAC');
-
-                return (
-                  <div
-                    key={flight.icao24}
-                    onClick={() => onSelectFlight(isSelected ? null : flight)}
-                    className={`p-2.5 rounded border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-cyan-950/80 border-cyan-400 text-cyan-100 shadow-[0_0_12px_rgba(0,242,254,0.3)]'
-                        : isOrnge
-                        ? 'bg-rose-950/40 border-rose-500/60 text-slate-200 hover:border-rose-400'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between font-bold text-xs">
-                      <span className="flex items-center gap-1.5">
-                        <Plane className={`w-3.5 h-3.5 ${isOrnge ? 'text-rose-400' : 'text-cyan-400'}`} />
-                        {flight.callsign}
-                        {flight.registration && flight.registration !== flight.callsign && (
-                          <span className="text-[9px] text-slate-400 font-normal">[{flight.registration}]</span>
-                        )}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        {flight.distanceKmToListowel} km out
-                      </span>
-                    </div>
-                    {flight.aircraftType && (
-                      <div className="text-[10px] text-cyan-400/90 truncate mt-0.5 font-mono">
-                        {flight.aircraftType}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1.5 text-[10px] text-slate-400">
-                      <div>
-                        ALT: <span className="text-slate-200">{flight.altitudeFeet ? `${flight.altitudeFeet.toLocaleString()} ft` : 'Ground'}</span>
-                      </div>
-                      <div>
-                        SPEED: <span className="text-slate-200">{flight.velocityKmh ? `${flight.velocityKmh} km/h` : 'N/A'}</span>
-                      </div>
-                      <div>
-                        ORIGIN: <span className="text-slate-300">{flight.originCountry}</span>
-                      </div>
-                      <div>
-                        HEADING: <span className="text-slate-300">{flight.trackHeading ? `${flight.trackHeading}°` : 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
-            {/* Maritime AIS Section (Lake Huron & Goderich Salt Port) */}
-            {vessels.length > 0 && (
-              <div className="pt-3 border-t border-slate-800 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1.5 font-tactical font-bold text-teal-400">
-                    <Ship className="w-3.5 h-3.5 text-teal-400" />
-                    LAKE HURON & GODERICH VESSELS (AIS)
-                  </span>
-                  <span className="text-[10px] font-mono text-teal-300">{vessels.length} SHIPS</span>
-                </div>
-
-                {vessels.slice(0, 8).map((vessel) => {
-                  const isSelected = selectedVessel?.mmsi === vessel.mmsi;
-                  return (
-                    <div
-                      key={vessel.mmsi}
-                      onClick={() => {
-                        if (onSelectVessel) onSelectVessel(isSelected ? null : vessel);
-                      }}
-                      className={`p-2 rounded border transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-teal-950/80 border-teal-400 text-teal-100 shadow-[0_0_12px_rgba(20,184,166,0.3)]'
-                          : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between font-bold text-xs">
-                        <span className="flex items-center gap-1.5 text-teal-300 truncate max-w-[170px]">
-                          <Anchor className="w-3 h-3 text-teal-400 flex-shrink-0" />
-                          {vessel.name}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono font-normal">
-                          {vessel.distanceKmToListowel} km
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                        {vessel.vesselType} • {vessel.destination || 'LAKE HURON'}
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1 pt-1 border-t border-slate-800/60">
-                        <span>SPD: <span className="text-white font-bold">{vessel.speedKnots} kts</span></span>
-                        <span>HDG: <span className="text-white font-bold">{vessel.headingDeg}°</span></span>
-                        <span>FLAG: <span className="text-slate-300">{vessel.flag || 'AIS'}</span></span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Military Flights Section (api.adsb.lol/v2/mil) */}
-            {milFlights.length > 0 && (
-              <div className="pt-3 border-t border-slate-800 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1.5 font-tactical font-bold text-red-400">
-                    <Shield className="w-3.5 h-3.5 text-red-400" />
-                    MILITARY AIR TRAFFIC (LIVE ADS-B)
-                  </span>
-                  <span className="text-[10px] font-mono text-red-300 bg-red-950/80 px-1.5 py-0.2 rounded border border-red-500/40">
-                    {milFlights.length} ACTIVE
-                  </span>
-                </div>
-
-                {milFlights.slice(0, 8).map((ac) => {
-                  const isSelected = selectedFlight?.icao24 === ac.hex;
-                  return (
-                    <div
-                      key={ac.hex}
-                      onClick={() => {
-                        onSelectFlight(
-                          isSelected
-                            ? null
-                            : {
-                                icao24: ac.hex,
-                                callsign: ac.callsign,
-                                originCountry: 'MILITARY / DND',
-                                latitude: ac.latitude,
-                                longitude: ac.longitude,
-                                altitudeMeters: ac.altitudeFeet ? Math.round(ac.altitudeFeet * 0.3048) : null,
-                                altitudeFeet: ac.altitudeFeet,
-                                velocityKmh: ac.speedKnots ? Math.round(ac.speedKnots * 1.852) : null,
-                                trackHeading: ac.headingDeg,
-                                verticalRate: null,
-                                onGround: false,
-                                squawk: ac.squawk || null,
-                                distanceKmToListowel: ac.distanceKmToListowel,
-                                aircraftType: ac.aircraftType || 'Military Airframe',
-                                registration: ac.registration,
-                              }
-                        );
-                      }}
-                      className={`p-2 rounded border transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-red-950/80 border-red-400 text-red-100 shadow-[0_0_12px_rgba(239,68,68,0.4)]'
-                          : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between font-bold text-xs">
-                        <span className="flex items-center gap-1.5 text-red-300 truncate max-w-[170px]">
-                          <Plane className="w-3 h-3 text-red-400 flex-shrink-0" />
-                          {ac.callsign}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono font-normal">
-                          {ac.distanceKmToListowel} km out
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                        {ac.aircraftType || 'Transponder Hex: ' + ac.hex}
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1 pt-1 border-t border-slate-800/60">
-                        <span>ALT: <span className="text-white font-bold">{ac.altitudeFeet ? ac.altitudeFeet.toLocaleString() + ' ft' : 'N/A'}</span></span>
-                        <span>SPD: <span className="text-white font-bold">{ac.speedKnots ? ac.speedKnots + ' kts' : 'N/A'}</span></span>
-                        <span>SQK: <span className="text-amber-300 font-bold">{ac.squawk || 'AUTO'}</span></span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 4: REGIONAL SEISMIC ACTIVITY (USGS LIVE) */}
-        {currentTab === 'seismic' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
-              <span className="flex items-center gap-1.5 font-bold text-amber-400">
-                <Activity className="w-3.5 h-3.5 text-amber-400" />
-                REGIONAL SEISMIC MONITOR (USGS)
-              </span>
-              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40">
-                {earthquakes.length} RECORDED (M2.0+)
-              </span>
-            </div>
-
-            {earthquakes && earthquakes.length > 0 ? (
-              <div className="space-y-2">
-                {earthquakes.map((q) => (
-                  <div key={q.id} className="p-2.5 rounded bg-slate-900/60 border border-slate-800 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-amber-300 flex items-center gap-1.5">
-                        <span className="px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 font-bold text-[10px] border border-amber-500/40 font-mono">
-                          M {q.magnitude}
-                        </span>
-                        <span className="truncate max-w-[210px]">{q.place}</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-400 pt-1 border-t border-slate-800/60 font-mono">
-                      <div>DEPTH: <span className="text-white font-semibold">{q.depthKm} km</span></div>
-                      <div>TIME: <span className="text-slate-300">{q.time}</span></div>
-                      <div className="col-span-2 text-cyan-300 font-semibold">
-                        RANGE: <span className="text-white font-bold">{q.distanceKmToListowel} km</span> from Listowel
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-5 rounded border border-slate-800 bg-slate-900/40 text-center text-slate-400 text-xs space-y-1.5">
-                <Activity className="w-6 h-6 mx-auto text-slate-600 mb-1" />
-                <div className="font-semibold text-slate-300">NO RECENT REGIONAL EVENTS</div>
-                <div className="text-[10px] text-slate-500">USGS seismometer network reporting quiet baseline across Great Lakes basin (M2.0+).</div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Status bar */}
-      <div className="p-2 border-t border-cyan-500/20 bg-slate-900/70 font-mono text-[10px] text-slate-400 flex items-center justify-between">
-        <span className="flex items-center gap-1">
-          <Clock className="w-3 h-3 text-cyan-400" />
-          AUTO-REFRESH: 15s
-        </span>
-        <span className="text-cyan-400">NORTH PERTH NET // ACTIVE</span>
       </div>
     </aside>
   );

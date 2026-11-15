@@ -132,6 +132,7 @@ export interface SchoolBusAlert {
 
 export interface ActiveLayers {
   towns: boolean;
+  agriHubs: boolean;
   radar: boolean;
   squall: boolean;
   flights: boolean;
