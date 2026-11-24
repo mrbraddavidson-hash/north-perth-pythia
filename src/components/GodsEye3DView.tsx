@@ -14,7 +14,10 @@ import {
 } from '../services/types';
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS } from '../services/api';
 import { NORTH_PERTH_AGRI_HUBS } from '../services/agri';
-import { cameraPopupHtml, attachLiveCamera } from '../services/cameras';
+import { cameraPopupHtml, attachLiveCamera, escapeHtml } from '../services/cameras';
+import { SquallTrajectory, LISTOWEL_HELIPAD_COORDS } from '../services/squall';
+import { SeismicEvent } from '../services/hazards';
+import { TargetSummary } from './TargetSummary';
 import { fetchEcccRadarTimes } from '../services/radar';
 import type { TrafficCamera } from '../services/types';
 import { MilitaryFlight, CANADIAN_MILITARY_INSTALLATIONS } from '../services/godseye';
@@ -37,6 +40,8 @@ import {
   Layers,
   Play,
   Pause,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 
 // Environment Canada 1 km radar, animated. Rain and snow are separate WMS layers (GeoMet allows one
@@ -52,6 +57,46 @@ const RADAR_LAST_FRAME_HOLD = 3; // linger on the latest scan for 3 ticks
 const radarFrameId = (product: string, time: string) => `radar-${product}-${time}`;
 const ecccRadarTiles = (wmsLayer: string, time: string) =>
   `https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetMap&layers=${wmsLayer}&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true&time=${time}`;
+// ---- GeoJSON overlay helpers (squall corridor, helipad approach ring, ISS footprint) ----
+type Ring = [number, number][]; // [lon, lat]
+const circleRing = (lat: number, lon: number, radiusKm: number, steps = 72): Ring => {
+  const ring: Ring = [];
+  const latR = (lat * Math.PI) / 180;
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * 2 * Math.PI;
+    const dLat = (radiusKm / 111.32) * Math.cos(a);
+    const dLon = (radiusKm / (111.32 * Math.cos(latR))) * Math.sin(a);
+    ring.push([lon + dLon, lat + dLat]);
+  }
+  return ring;
+};
+const polygonFC = (ring: Ring | null): GeoJSON.FeatureCollection => ({
+  type: 'FeatureCollection',
+  features: ring ? [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } }] : [],
+});
+// Create the source + fill/outline layers once, then just swap data (empty = hidden)
+function setPolygonOverlay(map: maplibregl.Map, id: string, ring: Ring | null, color: string, fillOpacity: number, dashed = true) {
+  const data = polygonFC(ring);
+  const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
+  if (src) {
+    src.setData(data);
+    return;
+  }
+  map.addSource(id, { type: 'geojson', data });
+  map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': fillOpacity } });
+  map.addLayer({
+    id: `${id}-line`,
+    type: 'line',
+    source: id,
+    paint: { 'line-color': color, 'line-width': 1.5, 'line-opacity': 0.8, ...(dashed ? { 'line-dasharray': [3, 3] } : {}) },
+  });
+}
+const DROUGHT_TILES =
+  'https://agriculture.canada.ca/imagery-images/services/canadian_drought_monitor/ImageServer/WMSServer?service=WMS&version=1.3.0&request=GetMap&layers=canadian_drought_monitor:canadian_drought_monitor&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true';
+
+const markerHtmlPopup = (html: string) =>
+  new maplibregl.Popup({ offset: 16, maxWidth: '300px', className: 'hud-popup' }).setHTML(html);
+
 const formatRadarTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit' });
 
@@ -69,6 +114,8 @@ interface GodsEye3DViewProps {
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
   milFlights?: MilitaryFlight[];
   cameras?: TrafficCamera[];
+  squallTrajectory?: SquallTrajectory | null;
+  earthquakes?: SeismicEvent[];
   onSwitchTo2D?: () => void;
 }
 
@@ -86,6 +133,8 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   onSelectVessel,
   milFlights = [],
   cameras = [],
+  squallTrajectory = null,
+  earthquakes = [],
   onSwitchTo2D,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -102,6 +151,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   const [radarTimes, setRadarTimes] = useState<string[]>([]);
   const [radarFrame, setRadarFrame] = useState<number>(0);
   const [isRadarPlaying, setIsRadarPlaying] = useState<boolean>(true);
+  const [isFollowing, setIsFollowing] = useState<boolean>(false);
   const orbitReqRef = useRef<number | null>(null);
 
   // Markers cache
@@ -113,6 +163,8 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
+      // Several data credits (imagery, ECCC radar, AAFC drought): keep them behind the ⓘ button
+      attributionControl: { compact: true },
       center: [NORTH_PERTH_COORDS[1], NORTH_PERTH_COORDS[0]], // [lon, lat]
       zoom: 11.5,
       pitch: 62,
@@ -218,6 +270,8 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
       if (orbitReqRef.current) cancelAnimationFrame(orbitReqRef.current);
       map.remove();
       mapRef.current = null;
+      // Markers belonged to the removed map; forget them so a re-created map gets fresh ones
+      markersRef.current = {};
     };
   }, []);
 
@@ -250,6 +304,68 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
     else if (opticMode === 'nvg') el.classList.add('optic-nvg');
     else if (opticMode === 'crt') el.classList.add('optic-crt');
   }, [opticMode]);
+
+  // ---- Area overlays: drought, squall corridor, helipad approach ring, ISS footprint ----
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      // AAFC drought monitor raster (below radar, above imagery)
+      if (!map.getSource('aafc-drought')) {
+        map.addSource('aafc-drought', {
+          type: 'raster',
+          tiles: [DROUGHT_TILES],
+          tileSize: 256,
+          attribution: 'Drought © Agriculture and Agri-Food Canada',
+        });
+        const firstRadar = map.getStyle().layers.find((l) => l.id.startsWith('radar-'))?.id ?? 'roads-layer';
+        map.addLayer(
+          { id: 'aafc-drought-layer', type: 'raster', source: 'aafc-drought', paint: { 'raster-opacity': 0.3 } },
+          firstRadar
+        );
+      }
+      map.setLayoutProperty('aafc-drought-layer', 'visibility', layers.drought ? 'visible' : 'none');
+
+      // Squall corridor only when the model says a squall is active (no placeholder corridor)
+      const squallRing =
+        layers.squall && squallTrajectory?.isActive && squallTrajectory.streamerPolygon.length >= 3
+          ? ([...squallTrajectory.streamerPolygon, squallTrajectory.streamerPolygon[0]].map(([la, lo]) => [lo, la]) as Ring)
+          : null;
+      setPolygonOverlay(map, 'squall-corridor', squallRing, '#38bdf8', 0.18);
+      setPolygonOverlay(
+        map,
+        'helipad-approach',
+        layers.helipad ? circleRing(LISTOWEL_HELIPAD_COORDS[0], LISTOWEL_HELIPAD_COORDS[1], 1.2) : null,
+        '#ef4444',
+        0.06
+      );
+      setPolygonOverlay(
+        map,
+        'iss-footprint',
+        layers.satellites && iss ? circleRing(iss.latitude, iss.longitude, 800) : null,
+        '#c084fc',
+        0.04,
+        false
+      );
+    };
+    if (map.getLayer('roads-layer')) apply();
+    else map.once('load', apply);
+    return () => {
+      map.off('load', apply);
+    };
+  }, [layers.drought, layers.squall, layers.helipad, layers.satellites, squallTrajectory, iss]);
+
+  // Follow the selected aircraft / vessel as its live position updates
+  useEffect(() => {
+    const map = mapRef.current;
+    const target = selectedFlight ?? selectedVessel;
+    if (!map || !isFollowing || !target) return;
+    map.easeTo({ center: [target.longitude, target.latitude], duration: 1000 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFollowing, selectedFlight?.latitude, selectedFlight?.longitude, selectedVessel?.latitude, selectedVessel?.longitude]);
+  useEffect(() => {
+    if (!selectedFlight && !selectedVessel) setIsFollowing(false);
+  }, [selectedFlight, selectedVessel]);
 
   // ---- Animated Doppler radar ----
   // Keep the frame list fresh (latest 8 ECCC scans) while the radar layer is on
@@ -401,6 +517,91 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
           currentMarkers[id] = marker;
         }
       });
+    }
+
+    // 1d. Listowel Memorial Hospital heliport (CPN5)
+    if (layers.helipad) {
+      const id = 'helipad-cpn5';
+      activeIds.add(id);
+      if (!currentMarkers[id]) {
+        const el = document.createElement('div');
+        el.className = 'cursor-pointer select-none';
+        el.innerHTML = `
+          <div class="relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-950/95 border-2 border-rose-500 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+            <span class="font-tactical font-black text-xs">H</span>
+            <span class="absolute -bottom-4 whitespace-nowrap text-[8px] bg-slate-950/90 text-rose-300 px-1 rounded border border-rose-500/40 font-mono">LMH HELIPORT</span>
+          </div>`;
+        currentMarkers[id] = new maplibregl.Marker({ element: el })
+          .setLngLat([LISTOWEL_HELIPAD_COORDS[1], LISTOWEL_HELIPAD_COORDS[0]])
+          .setPopup(
+            markerHtmlPopup(`
+              <div class="p-2 space-y-1 text-xs font-mono">
+                <div class="font-bold text-rose-400 text-sm border-b border-rose-500/30 pb-1">LISTOWEL MEMORIAL HOSPITAL · CPN5</div>
+                <div class="text-[11px] text-slate-300">Primary operator: <span class="text-rose-300 font-semibold">Ornge Air Ambulance</span></div>
+                <div class="text-[11px] text-slate-300">Coordinates: <span class="text-white">43.7372°N, 80.9568°W</span></div>
+                <div class="text-[10px] text-slate-400 pt-1">Dashed ring: 1.2 km approach area</div>
+              </div>`)
+          )
+          .addTo(map);
+      }
+    }
+
+    // 1e. USGS earthquakes (Great Lakes / Eastern Canada)
+    if (layers.seismic) {
+      earthquakes.forEach((eq) => {
+        const id = `quake-${eq.id}`;
+        activeIds.add(id);
+        if (currentMarkers[id]) return;
+        const big = eq.magnitude >= 2.0;
+        const el = document.createElement('div');
+        el.className = 'cursor-pointer select-none';
+        el.innerHTML = `
+          <div class="flex items-center justify-center w-7 h-7 rounded-full ${
+            big
+              ? 'bg-rose-500/30 border-2 border-rose-400 shadow-[0_0_15px_#f43f5e] text-rose-200'
+              : 'bg-amber-500/25 border-2 border-amber-400 shadow-[0_0_10px_#f59e0b] text-amber-200'
+          } text-[9px] font-bold font-mono">${eq.magnitude}</div>`;
+        currentMarkers[id] = new maplibregl.Marker({ element: el })
+          .setLngLat([eq.longitude, eq.latitude])
+          .setPopup(
+            markerHtmlPopup(`
+              <div class="p-2 space-y-1 text-xs font-mono">
+                <div class="flex items-center justify-between border-b border-amber-500/40 pb-1">
+                  <span class="font-bold text-amber-400 text-sm">M ${eq.magnitude} EARTHQUAKE</span>
+                  <span class="text-[9px] text-slate-400 font-bold">USGS</span>
+                </div>
+                <div class="text-white font-semibold">${escapeHtml(eq.place)}</div>
+                <div class="text-[11px] text-slate-300">Depth: <span class="text-white">${eq.depthKm} km</span> · ${escapeHtml(eq.time)}</div>
+                <div class="text-[11px] text-cyan-300">Distance to Listowel: <span class="font-bold text-white">${eq.distanceKmToListowel} km</span></div>
+              </div>`)
+          )
+          .addTo(map);
+      });
+    }
+
+    // 1f. International Space Station (live position)
+    if (layers.satellites && iss) {
+      const id = 'iss';
+      activeIds.add(id);
+      const label = `ISS · ${iss.altitudeKm} km · ${Math.round(iss.distanceKmToListowel).toLocaleString()} km away`;
+      if (!currentMarkers[id]) {
+        const el = document.createElement('div');
+        el.className = 'cursor-pointer select-none';
+        el.innerHTML = `
+          <div class="relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-950/95 border-2 border-purple-400 text-purple-300 shadow-[0_0_15px_#c084fc]">
+            <svg class="w-4 h-4 animate-spin" style="animation-duration: 30s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg>
+            <span data-iss-label class="absolute -bottom-4 whitespace-nowrap text-[8px] bg-slate-950/90 text-purple-300 px-1 rounded border border-purple-500/40 font-mono"></span>
+          </div>`;
+        el.onclick = () => {
+          const pos = currentMarkers[id]?.getLngLat();
+          if (pos) map.flyTo({ center: pos, zoom: 3.5, pitch: 40, duration: 1500 });
+        };
+        currentMarkers[id] = new maplibregl.Marker({ element: el }).setLngLat([iss.longitude, iss.latitude]).addTo(map);
+      } else {
+        currentMarkers[id].setLngLat([iss.longitude, iss.latitude]);
+      }
+      const labelEl = currentMarkers[id].getElement().querySelector('[data-iss-label]');
+      if (labelEl) labelEl.textContent = label;
     }
 
     // 1c. MTO 511 Road Cameras (click for live snapshot)
@@ -589,7 +790,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
         delete currentMarkers[id];
       }
     });
-  }, [layers, flights, milFlights, vessels, riverGauges, cameras, onSelectFlight, onSelectVessel]);
+  }, [layers, flights, milFlights, vessels, riverGauges, cameras, earthquakes, iss, onSelectFlight, onSelectVessel]);
 
   // Camera presets
   const flyToPreset = (target: 'north-perth' | 'theater' | 'high-orbit' | 'top-down') => {
@@ -685,6 +886,44 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
           </button>
         )}
       </div>
+
+      {/* TARGET TRACKING CARD (selected aircraft / vessel) */}
+      {(selectedFlight || selectedVessel) && (
+        <div className="absolute top-32 right-3 z-20 w-72 bg-slate-950/95 border border-cyan-400 rounded-lg p-3 font-mono text-xs shadow-[0_0_30px_rgba(0,242,254,0.25)] backdrop-blur-md">
+          <div className="flex items-center justify-between pb-1.5 border-b border-cyan-500/30 mb-2">
+            <div className="flex items-center gap-1.5">
+              <Target className="w-4 h-4 text-cyan-400" />
+              <span className="font-tactical font-bold text-white tracking-wider text-xs">TRACKING // LIVE TELEMETRY</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onSelectFlight(null);
+                onSelectVessel?.(null);
+              }}
+              className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+              title="Clear target"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <TargetSummary flight={selectedFlight} vessel={selectedVessel} />
+          <div className="pt-2 mt-2 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsFollowing((f) => !f)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-tactical font-bold cursor-pointer transition-colors ${
+                isFollowing
+                  ? 'bg-cyan-500 text-black shadow-[0_0_12px_#00f2fe]'
+                  : 'bg-black/60 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-950/40'
+              }`}
+            >
+              {isFollowing ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+              {isFollowing ? 'FOLLOWING TARGET' : 'FOLLOW TARGET'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* RADAR LOOP CONTROL (bottom right, above the map attribution) */}
       {layers.radar && radarTimes.length > 0 && (

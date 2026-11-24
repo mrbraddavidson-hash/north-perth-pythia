@@ -662,7 +662,7 @@ export const NORTH_PERTH_TRAFFIC_CAMERAS: BundledCamera[] = [
   },
 ];
 
-const escapeHtml = (v: unknown) =>
+export const escapeHtml = (v: unknown) =>
   String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 
 // MTO publishes still snapshots only (no video). We make them as live as the source allows:

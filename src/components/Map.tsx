@@ -17,6 +17,7 @@ import { SeismicEvent } from '../services/hazards';
 import { MaritimeVessel } from '../services/maritime';
 import { OpticMode } from '../services/types';
 import { cameraPopupHtml, attachLiveCamera } from '../services/cameras';
+import { TargetSummary } from './TargetSummary';
 import {
   fetchLiveRadarData,
   getRadarTileUrl,
@@ -1190,58 +1191,7 @@ export const MapView: React.FC<MapProps> = ({
             </button>
           </div>
 
-          {/* Target Summary */}
-          {selectedFlight && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-tactical font-black text-cyan-300">{selectedFlight.callsign}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-500/40 font-bold">
-                  {selectedFlight.originCountry || 'ADS-B'}
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-300 font-tactical">
-                {selectedFlight.aircraftType || 'Airborne Transponder'}
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 bg-black/60 p-2 rounded border border-slate-800 text-[10px]">
-                <div>ALT: <span className="text-white font-bold">{selectedFlight.altitudeFeet?.toLocaleString() ?? 'Ground'} ft</span></div>
-                <div>SPD: <span className="text-white font-bold">{selectedFlight.velocityKmh ?? 'N/A'} km/h</span></div>
-                <div>HDG: <span className="text-white font-bold">{selectedFlight.trackHeading ?? 0}°</span></div>
-                <div>SQUAWK: <span className="text-slate-400">{selectedFlight.squawk || 'AUTO'}</span></div>
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-cyan-300 px-1">
-                <span>RANGE: <span className="text-white font-bold">{selectedFlight.distanceKmToListowel} km</span> ({Math.round(selectedFlight.distanceKmToListowel * 0.54)} NM)</span>
-                <span>BRG: <span className="text-white font-bold">{Math.round((selectedFlight.trackHeading ?? 0))}°</span></span>
-              </div>
-            </div>
-          )}
-
-          {selectedVessel && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-tactical font-black text-cyan-300">{selectedVessel.name}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-950/80 text-teal-300 border border-teal-500/40 font-bold">
-                  {selectedVessel.flag || 'AIS'}
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-300 font-tactical">
-                {selectedVessel.vesselType}
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 bg-black/60 p-2 rounded border border-slate-800 text-[10px]">
-                <div>SPD: <span className="text-white font-bold">{selectedVessel.speedKnots} kts</span></div>
-                <div>HDG: <span className="text-white font-bold">{selectedVessel.headingDeg}°</span></div>
-                <div>DEST: <span className="text-white font-bold truncate">{selectedVessel.destination || 'LAKE HURON'}</span></div>
-                <div>MMSI: <span className="text-slate-400">{selectedVessel.mmsi}</span></div>
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-teal-300 px-1">
-                <span>RANGE: <span className="text-white font-bold">{selectedVessel.distanceKmToListowel} km</span> ({Math.round(selectedVessel.distanceKmToListowel * 0.54)} NM)</span>
-                <span>BRG: <span className="text-white font-bold">{selectedVessel.bearingFromListowelDeg}°</span></span>
-              </div>
-            </div>
-          )}
+          <TargetSummary flight={selectedFlight} vessel={selectedVessel} />
 
           {/* Action Row */}
           <div className="pt-2 mt-2 border-t border-slate-800 flex items-center justify-between">

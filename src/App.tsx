@@ -357,6 +357,8 @@ export function App() {
               onSelectVessel={handleSelectVessel}
               milFlights={milFlights}
               cameras={cameras}
+              squallTrajectory={squallTrajectory}
+              earthquakes={earthquakes}
               onSwitchTo2D={() => setViewDimension('2d')}
             />
           ) : (
