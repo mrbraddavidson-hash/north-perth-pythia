@@ -493,8 +493,12 @@ export async function fetchRoadConditions(apiKey?: string): Promise<RoadConditio
         if (Array.isArray(data)) {
           // Look for Hwy 23, 86, 8, 7 near North Perth
           const relevant = data.filter((r: any) => {
-            const text = `${r.RoadwayName} ${r.LocationDescription}`.toLowerCase();
-            return text.includes('23') || text.includes('86') || text.includes('atwood') || text.includes('harriston') || text.includes('stratford') || text.includes('listowel');
+            const road = String(r.RoadwayName ?? '').trim().toLowerCase();
+            const text = `${road} ${r.LocationDescription ?? ''}`.toLowerCase();
+            // Whole-number match only, so Hwy 123 / 286 / km 230 don't slip through
+            const isLocalHighway =
+              /^(?:hwy|highway)?\s*(?:23|86)$/.test(road) || /\b(?:hwy|highway)\s*(?:23|86)\b/.test(text);
+            return isLocalHighway || /\b(?:atwood|harriston|stratford|listowel)\b/.test(text);
           });
 
           if (relevant.length > 0) {

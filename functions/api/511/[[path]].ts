@@ -11,9 +11,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
   const targetUrl = `https://511on.ca${targetPath}${url.search}`;
 
-  const headers = new Headers(context.request.headers);
+  if (context.request.method !== 'GET' && context.request.method !== 'HEAD') {
+    return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
+  }
+
+  // Allow-list: never forward the visitor's cookies or auth headers upstream
+  const headers = new Headers();
+  const accept = context.request.headers.get('Accept');
+  if (accept) headers.set('Accept', accept);
   headers.set('Referer', 'https://511on.ca/');
-  headers.delete('host');
 
   try {
     const response = await fetch(targetUrl, {
