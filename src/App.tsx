@@ -6,6 +6,7 @@ import { MapView } from './components/Map';
 import { GodsEye3DView } from './components/GodsEye3DView';
 import { SpaceWeatherBar } from './components/SpaceWeatherBar';
 import { AgriFuelModal } from './components/AgriFuelModal';
+import { MunicipalRoadsModal } from './components/MunicipalRoadsModal';
 import {
   ActiveLayers,
   FlightData,
@@ -29,10 +30,12 @@ import {
   SeismicEvent,
 } from './services/hazards';
 import { fetchLiveMilitaryFlights, MilitaryFlight } from './services/godseye';
-import { Layers, Activity, X, Sprout, CloudSun } from 'lucide-react';
+import { Layers, Activity, X, Sprout, CloudSun, Construction } from 'lucide-react';
 
 export function App() {
   const [isAgriModalOpen, setIsAgriModalOpen] = useState<boolean>(false);
+  const [isRoadsModalOpen, setIsRoadsModalOpen] = useState<boolean>(false);
+  const closeRoadsModal = useCallback(() => setIsRoadsModalOpen(false), []);
   const [viewDimension, setViewDimension] = useState<'2d' | '3d'>('3d');
 
   // Desktop sidebars visibility state (Right panel defaults to true for Agricultural operations!)
@@ -313,6 +316,8 @@ export function App() {
       <SpaceWeatherBar aurora={aurora} iss={iss} onTrackIss={handleTrackIss} />
 
       {/* Agri & Fuel Intel Modal */}
+      <MunicipalRoadsModal isOpen={isRoadsModalOpen} onClose={closeRoadsModal} />
+
       <AgriFuelModal
         isOpen={isAgriModalOpen}
         onClose={() => setIsAgriModalOpen(false)}
@@ -414,6 +419,16 @@ export function App() {
                 <Sprout className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden sm:inline">Delta-T / Agri</span>
                 <span className="sm:hidden">Agri</span>
+              </button>
+
+              <button
+                onClick={() => setIsRoadsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-950/90 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                title="Municipal road closures, load restrictions & cams (Municipal511)"
+              >
+                <Construction className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Municipal Roads</span>
+                <span className="sm:hidden">Roads</span>
               </button>
             </div>
 
