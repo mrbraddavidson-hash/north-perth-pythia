@@ -12,12 +12,14 @@ import {
   RiverGaugeData,
   WeatherTelemetry,
   OpticMode,
+  TrafficCamera,
 } from './services/types';
 import { fetchLiveLakeHuronVessels, MaritimeVessel } from './services/maritime';
 import {
   fetchLiveFlights,
   fetchRiverGauges,
   fetchWeatherTelemetry,
+  fetchTrafficCameras,
   NORTH_PERTH_COORDS,
 } from './services/api';
 import { fetchAuroraKp, fetchLiveIss, AuroraData, IssTelemetry } from './services/space';
@@ -53,6 +55,7 @@ export function App() {
   const [layers, setLayers] = useState<ActiveLayers>({
     towns: true,
     agriHubs: true,
+    cams: true,
     radar: true,
     squall: true,
     flights: true,
@@ -82,6 +85,7 @@ export function App() {
   const [iss, setIss] = useState<IssTelemetry | null>(null);
   const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
   const [earthquakes, setEarthquakes] = useState<SeismicEvent[]>([]);
+  const [cameras, setCameras] = useState<TrafficCamera[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const selectedFlight = useMemo(
@@ -109,6 +113,7 @@ export function App() {
         fetchLiveEarthquakes(),
         fetchLiveLakeHuronVessels(),
         fetchLiveMilitaryFlights(),
+        fetchTrafficCameras(),
       ]);
 
       if (results[0].status === 'fulfilled') setFlights(results[0].value);
@@ -131,6 +136,7 @@ export function App() {
       if (results[5].status === 'fulfilled') setEarthquakes(results[5].value);
       if (results[6].status === 'fulfilled') setVessels(results[6].value);
       if (results[7].status === 'fulfilled') setMilFlights(results[7].value);
+      if (results[8].status === 'fulfilled') setCameras(results[8].value);
 
     } catch (err) {
       console.error('Error refreshing feeds:', err);
@@ -198,6 +204,7 @@ export function App() {
       setLayers({
         towns: true,
         agriHubs: true,
+        cams: true,
         radar: true,
         squall: true,
         flights: true,
@@ -214,6 +221,7 @@ export function App() {
       setLayers({
         towns: true,
         agriHubs: true,
+        cams: true,
         radar: true,
         squall: true,
         flights: false,
@@ -230,6 +238,7 @@ export function App() {
       setLayers({
         towns: true,
         agriHubs: true,
+        cams: true,
         radar: true,
         squall: false,
         flights: false,
@@ -246,6 +255,7 @@ export function App() {
       setLayers({
         towns: true,
         agriHubs: false,
+        cams: false,
         radar: false,
         squall: false,
         flights: true,
@@ -324,6 +334,7 @@ export function App() {
               flightCount={flights.length}
               vesselCount={vessels.length}
               milFlightCount={milFlights.length}
+              camCount={cameras.length}
               onClose={() => setIsLeftPanelOpen(false)}
             />
           </div>
@@ -345,6 +356,7 @@ export function App() {
               selectedVessel={selectedVessel}
               onSelectVessel={handleSelectVessel}
               milFlights={milFlights}
+              cameras={cameras}
               onSwitchTo2D={() => setViewDimension('2d')}
             />
           ) : (
@@ -365,6 +377,7 @@ export function App() {
               selectedVessel={selectedVessel}
               onSelectVessel={handleSelectVessel}
               milFlights={milFlights}
+              cameras={cameras}
               onSwitchTo3D={() => setViewDimension('3d')}
             />
           )}
@@ -478,6 +491,7 @@ export function App() {
                   flightCount={flights.length}
                   vesselCount={vessels.length}
                   milFlightCount={milFlights.length}
+              camCount={cameras.length}
                   onClose={() => setMobileDrawer('none')}
                 />
               </div>

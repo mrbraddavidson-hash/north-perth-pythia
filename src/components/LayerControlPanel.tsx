@@ -16,6 +16,7 @@ import {
   Shield,
   X,
   Building2,
+  Camera,
 } from 'lucide-react';
 import { ActiveLayers } from '../services/types';
 
@@ -27,6 +28,7 @@ interface LayerControlPanelProps {
   flightCount: number;
   vesselCount?: number;
   milFlightCount?: number;
+  camCount?: number;
   onClose?: () => void;
 }
 
@@ -38,6 +40,7 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
   flightCount,
   vesselCount = 0,
   milFlightCount = 0,
+  camCount = 0,
   onClose,
 }) => {
   const layerItems: {
@@ -63,6 +66,14 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
       icon: <Building2 className="w-4 h-4" />,
       color: 'text-emerald-400',
       badge: '7 HUBS',
+    },
+    {
+      key: 'cams',
+      label: 'MTO Road Cams',
+      sublabel: 'Live 511 highway snapshots (Hwy 23, 9, 6, 7/8)',
+      icon: <Camera className="w-4 h-4" />,
+      color: 'text-indigo-400',
+      badge: `${camCount} CAMS`,
     },
     {
       key: 'radar',

@@ -14,6 +14,8 @@ import {
 } from '../services/types';
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS } from '../services/api';
 import { NORTH_PERTH_AGRI_HUBS } from '../services/agri';
+import { cameraPopupHtml } from '../services/cameras';
+import type { TrafficCamera } from '../services/types';
 import { MilitaryFlight, CANADIAN_MILITARY_INSTALLATIONS } from '../services/godseye';
 import { MaritimeVessel } from '../services/maritime';
 import { IssTelemetry } from '../services/space';
@@ -49,6 +51,7 @@ interface GodsEye3DViewProps {
   selectedVessel?: MaritimeVessel | null;
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
   milFlights?: MilitaryFlight[];
+  cameras?: TrafficCamera[];
   onSwitchTo2D?: () => void;
 }
 
@@ -64,6 +67,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   selectedVessel = null,
   onSelectVessel,
   milFlights = [],
+  cameras = [],
   onSwitchTo2D,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -290,6 +294,27 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
       });
     }
 
+    // 1c. MTO 511 Road Cameras (click for live snapshot)
+    if (layers.cams) {
+      cameras.forEach((cam) => {
+        const id = `cam-${cam.id}`;
+        activeIds.add(id);
+        if (currentMarkers[id]) return;
+
+        const el = document.createElement('div');
+        el.className = 'cursor-pointer select-none';
+        el.title = `${cam.highway} – ${cam.name}`;
+        el.innerHTML = '<div class="flex items-center justify-center w-7 h-7 rounded-full bg-slate-950/95 border-2 border-indigo-400 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.5)] cursor-pointer hover:scale-110 transition-transform"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>';
+        const popup = new maplibregl.Popup({ offset: 16, maxWidth: '300px', className: 'cam-popup' });
+        // Rebuild on open so the snapshot is current
+        popup.on('open', () => popup.setHTML(cameraPopupHtml(cam)));
+        currentMarkers[id] = new maplibregl.Marker({ element: el })
+          .setLngLat([cam.longitude, cam.latitude])
+          .setPopup(popup.setHTML(cameraPopupHtml(cam)))
+          .addTo(map);
+      });
+    }
+
     // 2. Civilian ADS-B Aircraft in 3D
     if (layers.flights) {
       flights.forEach((flight) => {
@@ -450,7 +475,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
         delete currentMarkers[id];
       }
     });
-  }, [layers, flights, milFlights, vessels, riverGauges, onSelectFlight, onSelectVessel]);
+  }, [layers, flights, milFlights, vessels, riverGauges, cameras, onSelectFlight, onSelectVessel]);
 
   // Camera presets
   const flyToPreset = (target: 'north-perth' | 'theater' | 'high-orbit' | 'top-down') => {

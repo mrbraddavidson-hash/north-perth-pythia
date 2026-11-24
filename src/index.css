@@ -107,6 +107,23 @@ body {
   background: rgba(8, 14, 26, 0.95) !important;
 }
 
+/* 3D (MapLibre) road-cam popups: match the dark Leaflet popups */
+.cam-popup .maplibregl-popup-content {
+  background: rgba(8, 14, 26, 0.95);
+  color: #e2e8f0;
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  border-radius: 4px;
+  padding: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+}
+.cam-popup .maplibregl-popup-tip {
+  border-top-color: rgba(8, 14, 26, 0.95);
+  border-bottom-color: rgba(8, 14, 26, 0.95);
+}
+.cam-popup .maplibregl-popup-close-button {
+  color: #94a3b8;
+}
+
 /* Pulse Animations */
 @keyframes radar-pulse {
   0% {

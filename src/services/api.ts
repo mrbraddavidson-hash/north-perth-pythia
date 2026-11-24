@@ -11,6 +11,7 @@ import {
   SchoolBusAlert,
   LiveIncidentEvent,
 } from './types';
+import { NORTH_PERTH_TRAFFIC_CAMERAS, BundledCamera } from './cameras';
 
 // North Perth Reference Coordinates (Town of Listowel Town Hall)
 export const NORTH_PERTH_COORDS: [number, number] = [43.7317, -80.9525];
@@ -426,58 +427,62 @@ function ontario511KeyParam(apiKey?: string): string {
 }
 
 // 4. Traffic Cameras along Southwestern Ontario & Perth County Corridors
+function toTrafficCamera(c: BundledCamera): TrafficCamera {
+  return {
+    id: `511-${c.id}`,
+    name: c.name,
+    highway: c.highway,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    // Snapshot URL without a cache-buster; viewers append ?t= when they open a camera
+    imageUrl: `/api/511/map/Cctv/${c.views[0].id}`,
+    lastUpdated: 'LIVE MTO 511 SNAPSHOT',
+    direction: c.direction,
+    distanceKm: calculateDistanceKm(NORTH_PERTH_COORDS[0], NORTH_PERTH_COORDS[1], c.latitude, c.longitude),
+    views: c.views.map((v) => ({ id: v.id, description: v.description, url: `/api/511/map/Cctv/${v.id}` })),
+  };
+}
+
 export async function fetchTrafficCameras(apiKey?: string): Promise<TrafficCamera[]> {
   const cached = getCached<TrafficCamera[]>('511-cameras');
   if (cached) return cached;
 
-  {
-    try {
-      const url = `/api/511/api/v2/get/cameras?format=json${ontario511KeyParam(apiKey)}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          // Calculate distance to Listowel and sort closest first
-          const mapped: TrafficCamera[] = data
-            .filter((c: any) => c.Latitude && c.Longitude && c.Views && c.Views.length > 0)
-            .map((c: any) => {
-              const dist = calculateDistanceKm(NORTH_PERTH_COORDS[0], NORTH_PERTH_COORDS[1], c.Latitude, c.Longitude);
-              const primaryView = c.Views[0];
-              const viewsList = c.Views.map((v: any) => ({
-                id: v.Id,
-                description: v.Description || 'Camera Angle',
-                url: `/api/511/map/Cctv/${v.Id}`,
-              }));
-
-              return {
-                id: `511-${c.Id}`,
-                name: c.Location || c.Roadway || 'MTO Traffic Camera',
-                highway: c.Roadway || 'Highway',
-                latitude: c.Latitude,
-                longitude: c.Longitude,
-                imageUrl: `/api/511/map/Cctv/${primaryView.Id}?t=${Date.now()}`,
-                lastUpdated: 'LIVE MTO 511 SNAPSHOT // 60s REFRESH',
-                direction: c.Direction || primaryView.Description || 'Both Directions',
-                distanceKm: dist,
-                views: viewsList,
-              };
+  // Live camera list needs a 511 key (ONTARIO_511_KEY on the Pages proxy, or a user key)
+  try {
+    const res = await fetch(`/api/511/api/v2/get/cameras?format=json${ontario511KeyParam(apiKey)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const mapped = data
+          .filter((c: any) => typeof c.Latitude === 'number' && typeof c.Longitude === 'number' && c.Views?.length > 0)
+          .map((c: any) =>
+            toTrafficCamera({
+              id: c.Id,
+              name: c.Location || c.Roadway || 'MTO Traffic Camera',
+              highway: c.Roadway || 'Highway',
+              latitude: c.Latitude,
+              longitude: c.Longitude,
+              direction: c.Direction || 'Both Directions',
+              views: c.Views.map((v: any) => ({ id: v.Id, description: v.Description || 'Camera Angle' })),
             })
-            .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999))
-            // Take the 25 closest live cameras around North Perth & Perth County
-            .slice(0, 25);
+          )
+          .filter((c) => (c.distanceKm ?? Infinity) <= 45)
+          .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
 
-          if (mapped.length > 0) {
-            setCached('511-cameras', mapped, 10 * 60 * 1000);
-            return mapped;
-          }
+        if (mapped.length > 0) {
+          setCached('511-cameras', mapped, 10 * 60 * 1000);
+          return mapped;
         }
       }
-    } catch (err) {
-      console.warn('Failed to fetch real-time cameras using 511 key:', err);
     }
+  } catch (err) {
+    console.warn('Live 511 camera list unavailable, using bundled catalog:', err);
   }
 
-  return [];
+  // Keyless fallback: bundled camera locations; snapshots are still live
+  const bundled = NORTH_PERTH_TRAFFIC_CAMERAS.map(toTrafficCamera);
+  setCached('511-cameras', bundled, 10 * 60 * 1000);
+  return bundled;
 }
 
 export async function fetchRoadConditions(apiKey?: string): Promise<RoadCondition[]> {

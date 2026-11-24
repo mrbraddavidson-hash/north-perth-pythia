@@ -16,6 +16,7 @@ import { IssTelemetry } from '../services/space';
 import { SeismicEvent } from '../services/hazards';
 import { MaritimeVessel } from '../services/maritime';
 import { OpticMode } from '../services/types';
+import { cameraPopupHtml } from '../services/cameras';
 import {
   fetchLiveRadarData,
   getRadarTileUrl,
@@ -68,6 +69,7 @@ interface MapProps {
   selectedVessel?: MaritimeVessel | null;
   onSelectVessel?: (vessel: MaritimeVessel | null) => void;
   milFlights?: MilitaryFlight[];
+  cameras?: TrafficCamera[];
   onSwitchTo3D?: () => void;
 }
 
@@ -90,6 +92,7 @@ export const MapView: React.FC<MapProps> = ({
   selectedVessel = null,
   onSelectVessel,
   milFlights = [],
+  cameras = [],
   onSwitchTo3D,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -128,6 +131,7 @@ export const MapView: React.FC<MapProps> = ({
   const vesselsGroupRef = useRef<L.LayerGroup | null>(null);
   const militaryGroupRef = useRef<L.LayerGroup | null>(null);
   const agriHubsGroupRef = useRef<L.LayerGroup | null>(null);
+  const camsGroupRef = useRef<L.LayerGroup | null>(null);
   const [cameraTrackLock, setCameraTrackLock] = useState<boolean>(false);
   const [currentCenter, setCurrentCenter] = useState<[number, number]>(NORTH_PERTH_COORDS);
   const [currentZoom, setCurrentZoom] = useState<number>(11);
@@ -212,6 +216,7 @@ export const MapView: React.FC<MapProps> = ({
     vesselsGroupRef.current = L.layerGroup().addTo(map);
     militaryGroupRef.current = L.layerGroup().addTo(map);
     agriHubsGroupRef.current = L.layerGroup().addTo(map);
+    camsGroupRef.current = L.layerGroup().addTo(map);
 
     const updateMapCenterAndZoom = () => {
       const c = map.getCenter();
@@ -611,6 +616,25 @@ export const MapView: React.FC<MapProps> = ({
       `);
     });
   }, [layers.agriHubs]);
+
+  // Render MTO 511 Road Cameras
+  useEffect(() => {
+    if (!camsGroupRef.current || !mapInstanceRef.current) return;
+    camsGroupRef.current.clearLayers();
+    if (!layers.cams) return;
+
+    const icon = L.divIcon({
+      className: 'camera-marker-icon',
+      html: '<div class="flex items-center justify-center w-7 h-7 rounded-full bg-slate-950/95 border-2 border-indigo-400 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.5)] cursor-pointer hover:scale-110 transition-transform"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    cameras.forEach((cam) => {
+      L.marker([cam.latitude, cam.longitude], { icon, zIndexOffset: 60 })
+        .bindPopup(() => cameraPopupHtml(cam), { maxWidth: 300 })
+        .addTo(camsGroupRef.current!);
+    });
+  }, [cameras, layers.cams]);
 
   // Render Flights
   useEffect(() => {
