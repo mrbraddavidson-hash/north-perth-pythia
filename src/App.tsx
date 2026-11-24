@@ -67,8 +67,9 @@ export function App() {
   });
 
   const [radarOpacity, setRadarOpacity] = useState<number>(0.65);
-  const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
-  const [selectedVessel, setSelectedVessel] = useState<MaritimeVessel | null>(null);
+  // Store selection by id and resolve against the latest feed so track-lock and details stay live
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  const [selectedVesselId, setSelectedVesselId] = useState<number | null>(null);
   const [opticMode, setOpticMode] = useState<OpticMode>('normal');
 
   // Live Data states (empty initial state - strictly no simulated baseline)
@@ -82,6 +83,18 @@ export function App() {
   const [squallTrajectory, setSquallTrajectory] = useState<SquallTrajectory | null>(null);
   const [earthquakes, setEarthquakes] = useState<SeismicEvent[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const selectedFlight = useMemo(
+    () => (selectedFlightId ? flights.find((f) => f.icao24 === selectedFlightId) ?? null : null),
+    [flights, selectedFlightId]
+  );
+  const selectedVessel = useMemo(
+    () => (selectedVesselId !== null ? vessels.find((v) => v.mmsi === selectedVesselId) ?? null : null),
+    [vessels, selectedVesselId]
+  );
+  const handleSelectVessel = useCallback((vessel: MaritimeVessel | null) => {
+    setSelectedVesselId(vessel ? vessel.mmsi : null);
+  }, []);
 
   // Load all live feeds
   const refreshAllFeeds = useCallback(async () => {
@@ -103,14 +116,15 @@ export function App() {
       if (results[2].status === 'fulfilled') {
         const weatherData = results[2].value;
         setWeather(weatherData);
-        if (weatherData) {
-          const squall = calculateSquallTrajectory(
-            weatherData.windDirectionDeg,
-            weatherData.windSpeedKmh,
-            weatherData.temperatureC
-          );
-          setSquallTrajectory(squall);
-        }
+        setSquallTrajectory(
+          weatherData
+            ? calculateSquallTrajectory(
+                weatherData.windDirectionDeg,
+                weatherData.windSpeedKmh,
+                weatherData.temperatureC
+              )
+            : null
+        );
       }
       if (results[3].status === 'fulfilled') setAurora(results[3].value);
       if (results[4].status === 'fulfilled') setIss(results[4].value);
@@ -145,7 +159,7 @@ export function App() {
   };
 
   const handleSelectFlight = (flight: FlightData | null) => {
-    setSelectedFlight(flight);
+    setSelectedFlightId(flight ? flight.icao24 : null);
     if (flight) {
       setMobileDrawer('none');
     }
@@ -323,7 +337,7 @@ export function App() {
               vessels={vessels}
               opticMode={opticMode}
               selectedVessel={selectedVessel}
-              onSelectVessel={setSelectedVessel}
+              onSelectVessel={handleSelectVessel}
               milFlights={milFlights}
               onSwitchTo2D={() => setViewDimension('2d')}
             />
@@ -343,7 +357,7 @@ export function App() {
               opticMode={opticMode}
               onChangeOpticMode={setOpticMode}
               selectedVessel={selectedVessel}
-              onSelectVessel={setSelectedVessel}
+              onSelectVessel={handleSelectVessel}
               milFlights={milFlights}
               onSwitchTo3D={() => setViewDimension('3d')}
             />
@@ -420,7 +434,7 @@ export function App() {
               onOpenAgriModal={() => setIsAgriModalOpen(true)}
               vessels={vessels}
               selectedVessel={selectedVessel}
-              onSelectVessel={setSelectedVessel}
+              onSelectVessel={handleSelectVessel}
               milFlights={milFlights}
               onClose={() => setIsRightPanelOpen(false)}
               activeTab={rightPanelTab}
@@ -499,7 +513,7 @@ export function App() {
                   }}
                   vessels={vessels}
                   selectedVessel={selectedVessel}
-                  onSelectVessel={setSelectedVessel}
+                  onSelectVessel={handleSelectVessel}
                   milFlights={milFlights}
                   onClose={() => setMobileDrawer('none')}
                   activeTab={rightPanelTab}

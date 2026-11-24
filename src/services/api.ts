@@ -186,7 +186,9 @@ export async function fetchLiveFlights(): Promise<FlightData[]> {
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.states) && data.states.length > 0) {
-        const mapped = data.states.map((state: any[]) => {
+        const mapped = data.states
+          .filter((state: any[]) => typeof state[5] === 'number' && typeof state[6] === 'number')
+          .map((state: any[]) => {
           const icao24 = state[0];
           const callsign = (state[1] || 'UNKN').trim();
           const originCountry = state[2] || 'Unknown';
@@ -207,18 +209,20 @@ export async function fetchLiveFlights(): Promise<FlightData[]> {
             originCountry,
             latitude: lat,
             longitude: lon,
-            altitudeMeters: baroAlt ? Math.round(baroAlt) : null,
-            altitudeFeet: baroAlt ? Math.round(baroAlt * 3.28084) : null,
-            velocityKmh: velocity ? Math.round(velocity * 3.6) : null,
-            trackHeading: track !== null ? Math.round(track) : null,
-            verticalRate: vertRate,
+            altitudeMeters: typeof baroAlt === 'number' ? Math.round(baroAlt) : null,
+            altitudeFeet: typeof baroAlt === 'number' ? Math.round(baroAlt * 3.28084) : null,
+            velocityKmh: typeof velocity === 'number' ? Math.round(velocity * 3.6) : null,
+            trackHeading: typeof track === 'number' ? Math.round(track) : null,
+            verticalRate: typeof vertRate === 'number' ? vertRate : null,
             onGround,
             squawk,
             distanceKmToListowel: dist,
           };
         });
-        setCached('live-flights', mapped, 15 * 1000);
-        return mapped;
+        if (mapped.length > 0) {
+          setCached('live-flights', mapped, 15 * 1000);
+          return mapped;
+        }
       }
     }
   } catch {
@@ -271,15 +275,20 @@ async function fetchSingleStationGauge(station: StationConfig): Promise<RiverGau
     const lines = text.trim().split('\n').filter((l) => l.trim().length > 0);
     if (lines.length < 2) return null;
 
-    const lastLine = lines[lines.length - 1];
-    const prevLine = lines.length > 5 ? lines[lines.length - 5] : lines[lines.length - 2];
-    const parts = lastLine.split(',');
-    const prevParts = prevLine ? prevLine.split(',') : parts;
+    // Rows (after the header) with a real water-level reading; provisional rows can be blank
+    const readings = lines
+      .slice(1)
+      .map((l) => l.split(','))
+      .filter((p) => Number.isFinite(parseFloat(p[2])));
+    if (readings.length === 0) return null;
+
+    const parts = readings[readings.length - 1];
+    const prevParts = readings.length > 4 ? readings[readings.length - 5] : readings[0];
 
     const timestamp = parts[1] || new Date().toISOString();
-    const waterLevel = parseFloat(parts[2]) || 0;
+    const waterLevel = parseFloat(parts[2]);
     const discharge = parseFloat(parts[6]) || 0;
-    const prevWaterLevel = parseFloat(prevParts[2]) || waterLevel;
+    const prevWaterLevel = parseFloat(prevParts[2]);
 
     let alert: RiverGaugeData['floodStageAlert'] = 'NORMAL';
     if (waterLevel >= station.criticalLevel) alert = 'CRITICAL';
@@ -328,7 +337,7 @@ export async function fetchRiverGauges(): Promise<RiverGaugeData[]> {
 }
 
 // 3. Fetch hyper-local North Perth weather telemetry
-export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
+export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry | null> {
   const cached = getCached<WeatherTelemetry>('weather-telemetry');
   if (cached) return cached;
 
@@ -357,8 +366,9 @@ export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
     // Parse next 12 hours from hourly
     const hourlyForecast: HourlyForecastItem[] = [];
     if (data.hourly && Array.isArray(data.hourly.time)) {
-      const nowIso = new Date().toISOString().substring(0, 13);
-      const startIndex = data.hourly.time.findIndex((t: string) => t.startsWith(nowIso));
+      // hourly.time is America/Toronto local time; anchor on the API's own local current hour
+      const nowLocalHour = String(curr?.time ?? '').substring(0, 13);
+      const startIndex = nowLocalHour ? data.hourly.time.findIndex((t: string) => t.startsWith(nowLocalHour)) : -1;
       const fromIdx = startIndex >= 0 ? startIndex : 0;
       for (let i = fromIdx; i < Math.min(fromIdx + 12, data.hourly.time.length); i++) {
         const timeStr = data.hourly.time[i];
@@ -389,19 +399,8 @@ export async function fetchWeatherTelemetry(): Promise<WeatherTelemetry> {
     setCached('weather-telemetry', result, 2 * 60 * 1000);
     return result;
   } catch (err) {
-    console.warn('Weather fallback:', err);
-    return {
-      temperatureC: 19.3,
-      apparentTempC: 15.2,
-      humidityPercent: 53,
-      windSpeedKmh: 27,
-      windDirectionDeg: 228,
-      windGustsKmh: 54,
-      weatherCode: 0,
-      conditionLabel: 'Clear Skies',
-      barometricPressureHpa: 971,
-      cloudCoverPercent: 0,
-    };
+    console.warn('Weather feed unavailable:', err);
+    return null;
   }
 }
 
@@ -419,18 +418,21 @@ function getWeatherConditionLabel(code: number): string {
   return 'Stable Atmosphere';
 }
 
-export const DEFAULT_ONTARIO_511_KEY = '76bf408985044069bb0ad2560d2d1a2a';
+// The site's 511 key lives server-side (ONTARIO_511_KEY env var on the Pages proxy).
+// A user-supplied key (argument or localStorage) is forwarded and takes precedence.
+function ontario511KeyParam(apiKey?: string): string {
+  const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('ONTARIO_511_KEY') : null);
+  return key ? `&key=${encodeURIComponent(key)}` : '';
+}
 
 // 4. Traffic Cameras along Southwestern Ontario & Perth County Corridors
 export async function fetchTrafficCameras(apiKey?: string): Promise<TrafficCamera[]> {
   const cached = getCached<TrafficCamera[]>('511-cameras');
   if (cached) return cached;
 
-  const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('ONTARIO_511_KEY') : null) || DEFAULT_ONTARIO_511_KEY;
-
-  if (key) {
+  {
     try {
-      const url = `/api/511/api/v2/get/cameras?key=${encodeURIComponent(key)}&format=json`;
+      const url = `/api/511/api/v2/get/cameras?format=json${ontario511KeyParam(apiKey)}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -482,11 +484,9 @@ export async function fetchRoadConditions(apiKey?: string): Promise<RoadConditio
   const cached = getCached<RoadCondition[]>('511-roads');
   if (cached) return cached;
 
-  const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('ONTARIO_511_KEY') : null) || DEFAULT_ONTARIO_511_KEY;
-
-  if (key) {
+  {
     try {
-      const url = `/api/511/api/v2/get/roadconditions?key=${encodeURIComponent(key)}&format=json`;
+      const url = `/api/511/api/v2/get/roadconditions?format=json${ontario511KeyParam(apiKey)}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -550,10 +550,9 @@ export async function fetchLive511Incidents(apiKey?: string): Promise<LiveIncide
   const cached = getCached<LiveIncidentEvent[]>('511-incidents');
   if (cached) return cached;
 
-  const key = apiKey || DEFAULT_ONTARIO_511_KEY;
-  if (key) {
+  {
     try {
-      const url = `/api/511/api/v2/get/event?key=${encodeURIComponent(key)}&format=json`;
+      const url = `/api/511/api/v2/get/event?format=json${ontario511KeyParam(apiKey)}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();

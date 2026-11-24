@@ -467,7 +467,9 @@ export const MapView: React.FC<MapProps> = ({
         duration: 1.2,
       });
     }
-  }, [selectedFlight, selectedVessel]);
+    // Fly only when the selection changes; live position updates are handled by track lock
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFlight?.icao24, selectedVessel?.mmsi]);
 
   // Camera Track Lock (Continuous following if enabled)
   useEffect(() => {

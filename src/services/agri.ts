@@ -233,7 +233,7 @@ export function calculateDailyGdd(tmax: number, tmin: number, baseTemp: number):
   return Math.max(0, Math.round((avg - baseTemp) * 10) / 10);
 }
 
-export async function fetchLiveChuData(plantingDateStr: string = '2024-05-01'): Promise<ChuSeasonSummary | null> {
+export async function fetchLiveChuData(plantingDateStr?: string): Promise<ChuSeasonSummary | null> {
   try {
     const today = new Date();
     const currentYear = today.getFullYear();

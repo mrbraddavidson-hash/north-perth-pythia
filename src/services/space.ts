@@ -19,14 +19,17 @@ export interface IssTelemetry {
 }
 
 // 1. Fetch live NOAA planetary K-index (Aurora Borealis indicator)
-export async function fetchAuroraKp(): Promise<AuroraData> {
+export async function fetchAuroraKp(): Promise<AuroraData | null> {
   try {
     const res = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
     if (!res.ok) throw new Error('Failed to fetch NOAA Kp index');
     const data = await res.json();
     if (Array.isArray(data) && data.length > 1) {
       const latest = data[data.length - 1];
-      const kp = parseFloat(latest.Kp) || 2.0;
+      // SWPC has served both [time_tag, Kp, ...] rows (with a header row) and {time_tag, Kp} objects
+      const kp = parseFloat(Array.isArray(latest) ? latest[1] : latest?.Kp);
+      const timeTag = Array.isArray(latest) ? latest[0] : latest?.time_tag;
+      if (!Number.isFinite(kp)) throw new Error('Unrecognised NOAA Kp payload');
 
       let status: AuroraData['status'] = 'QUIET';
       let likelihood: AuroraData['auroraLikelihood'] = 'LOW';
@@ -48,19 +51,14 @@ export async function fetchAuroraKp(): Promise<AuroraData> {
         kpIndex: Math.round(kp * 10) / 10,
         status,
         auroraLikelihood: likelihood,
-        lastUpdated: latest.time_tag || new Date().toISOString(),
+        lastUpdated: timeTag || new Date().toISOString(),
       };
     }
   } catch (err) {
     console.warn('NOAA Space Weather fallback:', err);
   }
 
-  return {
-    kpIndex: 2.7,
-    status: 'QUIET',
-    auroraLikelihood: 'LOW',
-    lastUpdated: 'Live NOAA SWPC',
-  };
+  return null;
 }
 
 // 2. Fetch real-time International Space Station orbit

@@ -56,7 +56,7 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
   const [commodities, setCommodities] = useState<CommodityFuture[]>([]);
   const [chuData, setChuData] = useState<ChuSeasonSummary | null>(null);
   const [usdCadRate, setUsdCadRate] = useState<number>(1.40);
-  const [plantingDate, setPlantingDate] = useState<string>('2024-05-01');
+  const [plantingDate, setPlantingDate] = useState<string>(`${new Date().getFullYear()}-05-01`);
   const [selectedCrop, setSelectedCrop] = useState<'corn' | 'soy' | 'wheat'>('corn');
   const [selectedElevator, setSelectedElevator] = useState<OntarioElevatorPreset>(ONTARIO_ELEVATOR_PRESETS[0]);
   const [customBasis, setCustomBasis] = useState<number>(1.25);
@@ -91,11 +91,14 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
 
   if (!isOpen) return null;
 
-  const temp = weather?.temperatureC ?? 16;
-  const rh = weather?.humidityPercent ?? 54;
-  const wind = weather?.windSpeedKmh ?? 14;
+  // No live weather -> no spray advice (never compute from placeholder values)
+  const temp = weather?.temperatureC;
+  const rh = weather?.humidityPercent;
+  const wind = weather?.windSpeedKmh;
 
-  const sprayInfo: SprayCondition = calculateSprayWindow(temp, rh, wind);
+  const sprayInfo: SprayCondition | null = weather
+    ? calculateSprayWindow(weather.temperatureC, weather.humidityPercent, weather.windSpeedKmh)
+    : null;
   const burnStatus = getBurnPermitStatus();
 
   // Selected crop parameters for basis
@@ -221,7 +224,8 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
           {/* TAB 1: DELTA-T SPRAY */}
           {activeTab === 'spray' && (
             <div className="space-y-4">
-              {/* Spray Advisory Card */}
+              {sprayInfo ? (
+              /* Spray Advisory Card */
               <div
                 className={`p-4 rounded border ${
                   sprayInfo.status === 'OPTIMAL'
@@ -275,6 +279,12 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              ) : (
+                <div className="p-4 rounded border border-slate-700 bg-slate-900/40 text-xs text-slate-400">
+                  LIVE WEATHER FEED UNAVAILABLE // Delta-T spray window is paused until live readings return.
+                </div>
+              )}
 
               {/* Burn Permit Card */}
               <div className="p-4 rounded border border-slate-800 bg-slate-900/40">
@@ -436,7 +446,7 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
                       <span className="text-slate-300 font-bold">PLANTING DATE:</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {['2024-05-01', '2024-05-10', '2024-05-20'].map((d) => (
+                      {['05-01', '05-10', '05-20'].map((md) => `${new Date().getFullYear()}-${md}`).map((d) => (
                         <button
                           key={d}
                           onClick={() => setPlantingDate(d)}
@@ -446,7 +456,7 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
                               : 'bg-black/40 text-slate-400 hover:text-white border border-slate-800'
                           }`}
                         >
-                          {d.replace('2024-', '')}
+                          {d.slice(5)}
                         </button>
                       ))}
                     </div>

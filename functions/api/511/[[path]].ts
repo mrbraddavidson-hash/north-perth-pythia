@@ -1,6 +1,14 @@
-export const onRequest: PagesFunction = async (context) => {
+interface Env {
+  ONTARIO_511_KEY?: string;
+}
+
+export const onRequest: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url);
   const targetPath = url.pathname.replace(/^\/api\/511/, '');
+  // Inject the site's 511 key server-side so it never ships in the client bundle
+  if (targetPath.startsWith('/api/') && !url.searchParams.has('key') && context.env.ONTARIO_511_KEY) {
+    url.searchParams.set('key', context.env.ONTARIO_511_KEY);
+  }
   const targetUrl = `https://511on.ca${targetPath}${url.search}`;
 
   const headers = new Headers(context.request.headers);

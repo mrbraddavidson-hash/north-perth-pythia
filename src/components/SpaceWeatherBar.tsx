@@ -9,7 +9,7 @@ interface SpaceWeatherBarProps {
 }
 
 export const SpaceWeatherBar: React.FC<SpaceWeatherBarProps> = ({ aurora, iss, onTrackIss }) => {
-  const kp = aurora?.kpIndex ?? 2.7;
+  const kp = aurora?.kpIndex ?? 0; // only used for colour/alert; label shows '--' when unavailable
 
   const kpColor =
     kp >= 6
@@ -25,8 +25,8 @@ export const SpaceWeatherBar: React.FC<SpaceWeatherBarProps> = ({ aurora, iss, o
         <Sparkles className="w-3.5 h-3.5 text-purple-400" />
         <span className="text-slate-400 hidden sm:inline">AURORA KP:</span>
         <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-bold ${kpColor}`}>
-          <span>{kp} Kp</span>
-          <span className="text-[9px] font-normal opacity-80">({aurora?.status ?? 'QUIET'})</span>
+          <span>{aurora ? `${aurora.kpIndex} Kp` : '-- Kp'}</span>
+          <span className="text-[9px] font-normal opacity-80">({aurora?.status ?? 'NO DATA'})</span>
         </div>
         {kp >= 5 && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-900 text-purple-200 border border-purple-400 animate-pulse">

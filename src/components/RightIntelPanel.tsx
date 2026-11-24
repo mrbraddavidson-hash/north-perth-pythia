@@ -103,7 +103,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   const [commodities, setCommodities] = useState<CommodityFuture[]>([]);
   const [chuData, setChuData] = useState<ChuSeasonSummary | null>(null);
   const [usdCadRate, setUsdCadRate] = useState<number>(1.40);
-  const [plantingDate, setPlantingDate] = useState<string>('2024-05-01');
+  const [plantingDate, setPlantingDate] = useState<string>(`${new Date().getFullYear()}-05-01`);
 
   // Calculator states
   const [selectedCrop, setSelectedCrop] = useState<'corn' | 'soy' | 'wheat'>('corn');
@@ -136,12 +136,17 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
     };
   }, [plantingDate]);
 
-  const temp = weather?.temperatureC ?? 16;
-  const rh = weather?.humidityPercent ?? 55;
-  const wind = weather?.windSpeedKmh ?? 14;
+  // No live weather -> no spray/THI advice (never compute from placeholder values)
+  const temp = weather?.temperatureC;
+  const rh = weather?.humidityPercent;
+  const wind = weather?.windSpeedKmh;
 
-  const sprayInfo: SprayCondition = calculateSprayWindow(temp, rh, wind);
-  const dairyStress: LivestockStressTelemetry = calculateDairyHeatStress(temp, rh);
+  const sprayInfo: SprayCondition | null = weather
+    ? calculateSprayWindow(weather.temperatureC, weather.humidityPercent, weather.windSpeedKmh)
+    : null;
+  const dairyStress: LivestockStressTelemetry | null = weather
+    ? calculateDairyHeatStress(weather.temperatureC, weather.humidityPercent)
+    : null;
   const burnStatus = getBurnPermitStatus();
   const mvca = getMvcaWatershedBulletin(riverGauges);
   const weatherAlerts = getWeatherAlerts(weather);
@@ -252,6 +257,8 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
         {/* ========================================================================= */}
         {currentTab === 'agri' && (
           <div className="space-y-3">
+            {sprayInfo && dairyStress ? (
+            <>
             {/* 1. Delta-T & Chemical Spray Window */}
             <div className="p-3 rounded bg-slate-900/90 border border-emerald-500/40 shadow-sm space-y-2">
               <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
@@ -328,6 +335,13 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                 </div>
               </div>
             </div>
+
+            </>
+            ) : (
+              <div className="p-3 rounded bg-slate-900/90 border border-slate-700 text-[10px] text-slate-400">
+                LIVE WEATHER FEED UNAVAILABLE // Delta-T spray window and dairy THI are paused until live readings return.
+              </div>
+            )}
 
             {/* 3. Soil Physics & Moisture Telemetry */}
             <div className="p-3 rounded bg-slate-900/90 border border-amber-500/40 shadow-sm space-y-2">
