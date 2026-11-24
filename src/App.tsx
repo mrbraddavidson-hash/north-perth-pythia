@@ -277,6 +277,12 @@ export function App() {
         onToggleLeftPanel={() => setIsLeftPanelOpen((prev) => !prev)}
         isRightPanelOpen={isRightPanelOpen}
         onToggleRightPanel={(tab) => {
+          // Below lg the desktop panel is hidden, so open the mobile intel drawer instead
+          if (window.innerWidth < 1024) {
+            if (tab) setRightPanelTab(tab);
+            setMobileDrawer((prev) => (prev === 'intel' && !tab ? 'none' : 'intel'));
+            return;
+          }
           if (tab) {
             setRightPanelTab(tab);
             setIsRightPanelOpen(true);
@@ -398,17 +404,17 @@ export function App() {
 
             {/* Right Buttons: Floating Weather & Sitrep Trigger */}
             <div className="pointer-events-auto">
-              {!isRightPanelOpen && (
-                <button
+              {/* Always shown below lg (desktop panel is hidden there); on desktop only when the panel is closed */}
+              <button
                   onClick={() => {
+                    setRightPanelTab('weather');
                     if (window.innerWidth < 1024) {
                       setMobileDrawer('intel');
                     } else {
-                      setRightPanelTab('weather');
                       setIsRightPanelOpen(true);
                     }
                   }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-slate-200 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                  className={`${isRightPanelOpen ? 'flex lg:hidden' : 'flex'} items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-slate-200 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer`}
                   title="Open Live Weather & Telemetry Sidebar"
                 >
                   <CloudSun className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
@@ -416,7 +422,6 @@ export function App() {
                   <span className="text-slate-400 text-[11px] hidden sm:inline">{weather?.conditionLabel ?? 'Weather'}</span>
                   <span className="text-[10px] text-cyan-400 font-bold">◀ INTEL</span>
                 </button>
-              )}
             </div>
           </div>
         </main>
