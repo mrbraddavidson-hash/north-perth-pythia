@@ -27,6 +27,7 @@ import {
   Scale,
   Beef,
   Wheat,
+  Clock,
 } from 'lucide-react';
 import {
   FlightData,
@@ -713,6 +714,58 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                     <div className="text-slate-400">Condition</div>
                     <div className="font-bold text-cyan-300">{weather.conditionLabel}</div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Next 12 Hours Forecast Timeline */}
+            {weather?.hourlyForecast && weather.hourlyForecast.length > 0 && (
+              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-cyan-400" />
+                  NEXT 12 HOURS FORECAST
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                  {weather.hourlyForecast.map((h, i) => (
+                    <div
+                      key={i}
+                      className="flex-shrink-0 flex flex-col items-center p-1.5 rounded bg-slate-950/80 border border-slate-800/80 min-w-[50px] text-center"
+                    >
+                      <span className="text-[9px] text-slate-400">{h.time}</span>
+                      <span className="text-[11px] font-bold text-white my-0.5">{h.tempC}°</span>
+                      <span className={`text-[8px] font-bold ${h.precipProb > 30 ? 'text-cyan-400' : 'text-slate-500'}`}>
+                        {h.precipProb}% rain
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3-Day Outlook */}
+            {weather?.dailyForecast && weather.dailyForecast.length > 0 && (
+              <div className="p-3 rounded bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                  <Sun className="w-3 h-3 text-cyan-400" />
+                  3-DAY METEOROLOGICAL OUTLOOK
+                </div>
+                <div className="space-y-1.5">
+                  {weather.dailyForecast.map((day, i) => {
+                    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : day.date.substring(5);
+                    return (
+                      <div
+                        key={day.date}
+                        className="flex items-center justify-between p-2 rounded bg-slate-950/60 border border-slate-800 text-[10px]"
+                      >
+                        <span className="font-semibold text-slate-200 w-16">{label}</span>
+                        <span className="text-slate-400 truncate flex-1 px-2">{day.conditionLabel}</span>
+                        <div className="font-mono text-right flex items-center gap-2">
+                          <span className="text-rose-400 font-bold">{day.tempMaxC}°</span>
+                          <span className="text-cyan-400 font-bold">{day.tempMinC}°</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
