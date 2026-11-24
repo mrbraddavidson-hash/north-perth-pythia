@@ -38,6 +38,16 @@ import {
   Pause,
 } from 'lucide-react';
 
+// Environment Canada 1 km radar (rain + snow are separate WMS layers; GeoMet allows one layer per request).
+// No TIME parameter = latest scan; `_t` busts the tile cache on refresh. ECCC updates every ~6 minutes.
+const RADAR_LAYERS = [
+  { id: 'radar-rain-layer', source: 'eccc-radar-rain', wms: 'RADAR_1KM_RRAI' },
+  { id: 'radar-snow-layer', source: 'eccc-radar-snow', wms: 'RADAR_1KM_RSNO' },
+] as const;
+const RADAR_REFRESH_MS = 6 * 60 * 1000;
+const ecccRadarTiles = (wmsLayer: string, stamp: number) =>
+  `https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetMap&layers=${wmsLayer}&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true&_t=${stamp}`;
+
 interface GodsEye3DViewProps {
   layers: ActiveLayers;
   flights: FlightData[];
@@ -61,6 +71,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   riverGauges,
   selectedFlight,
   onSelectFlight,
+  radarOpacity,
   iss,
   vessels = [],
   opticMode = 'normal',
@@ -125,6 +136,17 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
             tileSize: 256,
             maxzoom: 18,
           },
+          ...Object.fromEntries(
+            RADAR_LAYERS.map((r) => [
+              r.source,
+              {
+                type: 'raster' as const,
+                tiles: [ecccRadarTiles(r.wms, Date.now())],
+                tileSize: 256,
+                attribution: 'Radar © Environment and Climate Change Canada',
+              },
+            ])
+          ),
           'dem-terrain': {
             type: 'raster-dem',
             tiles: [
@@ -143,6 +165,13 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
             minzoom: 0,
             maxzoom: 22,
           },
+          ...RADAR_LAYERS.map((r) => ({
+            id: r.id,
+            type: 'raster' as const,
+            source: r.source,
+            layout: { visibility: 'none' as const },
+            paint: { 'raster-opacity': 0.65, 'raster-fade-duration': 0 },
+          })),
           {
             id: 'roads-layer',
             type: 'raster',
@@ -229,6 +258,37 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
     else if (opticMode === 'nvg') el.classList.add('optic-nvg');
     else if (opticMode === 'crt') el.classList.add('optic-crt');
   }, [opticMode]);
+
+  // Live Doppler radar: follow the Radar layer toggle and opacity slider
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      RADAR_LAYERS.forEach((r) => {
+        map.setLayoutProperty(r.id, 'visibility', layers.radar ? 'visible' : 'none');
+        map.setPaintProperty(r.id, 'raster-opacity', radarOpacity);
+      });
+    };
+    if (map.getLayer(RADAR_LAYERS[0].id)) apply();
+    else map.once('load', apply);
+    return () => {
+      map.off('load', apply);
+    };
+  }, [layers.radar, radarOpacity]);
+
+  // Pull the latest radar scan periodically while the layer is on
+  useEffect(() => {
+    if (!layers.radar) return;
+    const timer = window.setInterval(() => {
+      const map = mapRef.current;
+      if (!map || document.hidden) return;
+      const stamp = Date.now();
+      RADAR_LAYERS.forEach((r) => {
+        (map.getSource(r.source) as maplibregl.RasterTileSource | undefined)?.setTiles([ecccRadarTiles(r.wms, stamp)]);
+      });
+    }, RADAR_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [layers.radar]);
 
   // Sync 3D Markers (Aircraft, Military, Ships, Towns, River Gauges)
   useEffect(() => {
