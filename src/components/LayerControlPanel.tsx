@@ -70,7 +70,7 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
     {
       key: 'cams',
       label: 'MTO Road Cams',
-      sublabel: 'Live 511 highway snapshots (Hwy 23, 9, 6, 7/8)',
+      sublabel: 'Live 511 snapshots within 75 km (Hwy 23, 401, 7/8, 21…)',
       icon: <Camera className="w-4 h-4" />,
       color: 'text-indigo-400',
       badge: `${camCount} CAMS`,

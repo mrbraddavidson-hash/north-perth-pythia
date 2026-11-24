@@ -11,7 +11,7 @@ import {
   SchoolBusAlert,
   LiveIncidentEvent,
 } from './types';
-import { NORTH_PERTH_TRAFFIC_CAMERAS, BundledCamera } from './cameras';
+import { NORTH_PERTH_TRAFFIC_CAMERAS, BundledCamera, CAMERA_RADIUS_KM } from './cameras';
 
 // North Perth Reference Coordinates (Town of Listowel Town Hall)
 export const NORTH_PERTH_COORDS: [number, number] = [43.7317, -80.9525];
@@ -466,7 +466,7 @@ export async function fetchTrafficCameras(apiKey?: string): Promise<TrafficCamer
               views: c.Views.map((v: any) => ({ id: v.Id, description: v.Description || 'Camera Angle' })),
             })
           )
-          .filter((c) => (c.distanceKm ?? Infinity) <= 45)
+          .filter((c) => (c.distanceKm ?? Infinity) <= CAMERA_RADIUS_KM)
           .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
 
         if (mapped.length > 0) {
