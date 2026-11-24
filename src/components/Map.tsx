@@ -16,7 +16,7 @@ import { IssTelemetry } from '../services/space';
 import { SeismicEvent } from '../services/hazards';
 import { MaritimeVessel } from '../services/maritime';
 import { OpticMode } from '../services/types';
-import { cameraPopupHtml } from '../services/cameras';
+import { cameraPopupHtml, attachLiveCamera } from '../services/cameras';
 import {
   fetchLiveRadarData,
   getRadarTileUrl,
@@ -630,8 +630,13 @@ export const MapView: React.FC<MapProps> = ({
       iconAnchor: [14, 14],
     });
     cameras.forEach((cam) => {
+      let stopLive = () => {};
       L.marker([cam.latitude, cam.longitude], { icon, zIndexOffset: 60 })
         .bindPopup(() => cameraPopupHtml(cam), { maxWidth: 300 })
+        .on('popupopen', (e) => {
+          stopLive = attachLiveCamera(e.popup.getElement(), cam);
+        })
+        .on('popupclose', () => stopLive())
         .addTo(camsGroupRef.current!);
     });
   }, [cameras, layers.cams]);

@@ -172,30 +172,116 @@ export const NORTH_PERTH_TRAFFIC_CAMERAS: BundledCamera[] = [
 const escapeHtml = (v: unknown) =>
   String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 
-// Popup markup shared by the 2D (Leaflet) and 3D (MapLibre) camera layers.
-// Built on open so the snapshot cache-buster is always fresh.
+// MTO publishes still snapshots only (no video). We make them as live as the source allows:
+// auto-refresh, show when the image was actually taken, and switch between the camera's angles.
+const REFRESH_MS = 30_000;
+const snapshotUrl = (viewId: number) => `/api/511/map/Cctv/${viewId}`;
+
+// Popup markup shared by the 2D (Leaflet) and 3D (MapLibre) camera layers. Pair with attachLiveCamera().
 export function cameraPopupHtml(cam: import('./types').TrafficCamera): string {
-  const viewId = cam.views?.[0]?.id;
-  const snapshot = `${cam.imageUrl}?t=${Date.now()}`;
-  const link = viewId ? `https://511on.ca/map/Cctv/${viewId}` : 'https://511on.ca/';
+  const views = cam.views ?? [];
+  const first = views[0];
+  const angleButtons =
+    views.length > 1
+      ? `<div class="flex flex-wrap gap-1">${views
+          .map(
+            (v, i) =>
+              `<button type="button" data-cam-view="${v.id}" class="px-1.5 py-0.5 rounded border text-[9px] font-bold cursor-pointer ${
+                i === 0 ? 'bg-indigo-900 border-indigo-400 text-white' : 'bg-slate-900 border-slate-700 text-slate-400'
+              }">${escapeHtml(v.description.replace(/^Looking\s+/i, ''))}</button>`
+          )
+          .join('')}</div>`
+      : '';
   return `
-    <div class="p-2 space-y-2 text-xs font-mono w-[280px] text-slate-200">
+    <div class="p-2 space-y-2 text-xs font-mono w-[280px] text-slate-200" data-cam-popup>
       <div class="flex items-center justify-between border-b border-indigo-500/30 pb-1">
-        <span class="font-bold text-indigo-300 text-sm">${escapeHtml(cam.highway)} CCTV</span>
-        <span class="text-[9px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40 font-bold">LIVE SNAPSHOT</span>
+        <span class="font-bold text-indigo-300 text-sm">${escapeHtml(cam.highway)} CAM</span>
+        <span class="flex items-center gap-1 text-[9px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40 font-bold">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>AUTO-REFRESH 30s
+        </span>
       </div>
       <div class="text-[11px] font-semibold text-white">${escapeHtml(cam.name)}</div>
       <div class="relative rounded overflow-hidden border border-slate-700 bg-slate-900 aspect-video">
-        <img src="${escapeHtml(snapshot)}" alt="${escapeHtml(cam.name)}" class="w-full h-full object-cover" loading="eager" />
+        <img data-cam-img src="${first ? `${snapshotUrl(first.id)}?t=${Date.now()}` : ''}" alt="${escapeHtml(cam.name)}" class="w-full h-full object-cover" loading="eager" />
         ${cam.distanceKm !== undefined ? `<div class="absolute top-1 left-1 text-[9px] bg-slate-950/85 px-1.5 py-0.5 text-slate-300 rounded border border-slate-700">${cam.distanceKm} km from Listowel</div>` : ''}
+        <div data-cam-age class="absolute bottom-1 right-1 text-[9px] bg-black/85 px-1.5 py-0.5 text-cyan-300 rounded">Checking image time…</div>
       </div>
       <div class="flex items-center justify-between text-[10px] text-slate-400">
-        <span>Direction: <strong class="text-white">${escapeHtml(cam.direction)}</strong></span>
-        ${cam.views ? `<span class="text-indigo-300 font-semibold">${cam.views.length} angles</span>` : ''}
+        <span>View: <strong data-cam-dir class="text-white">${escapeHtml(first?.description ?? cam.direction)}</strong></span>
+        ${views.length > 1 ? `<span class="text-indigo-300 font-semibold">${views.length} angles</span>` : ''}
       </div>
-      <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"
+      ${angleButtons}
+      <a data-cam-link href="https://511on.ca/map/Cctv/${first?.id ?? ''}" target="_blank" rel="noopener noreferrer"
          class="flex items-center justify-center w-full py-1.5 rounded bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 hover:text-white border border-indigo-500/40 text-[11px] font-bold no-underline">
         OPEN ON 511ON.CA ↗
       </a>
     </div>`;
+}
+
+function describeAge(lastModified: string | null): string {
+  if (!lastModified) return 'LIVE MTO SNAPSHOT';
+  const taken = new Date(lastModified);
+  if (Number.isNaN(taken.getTime())) return 'LIVE MTO SNAPSHOT';
+  const mins = Math.max(0, Math.round((Date.now() - taken.getTime()) / 60000));
+  const clock = taken.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `Taken ${clock} (${mins === 0 ? 'just now' : `${mins} min ago`})`;
+}
+
+// Wires up a rendered camera popup: angle switching, 30s auto-refresh and image-age label.
+// Returns a cleanup function to call when the popup closes.
+export function attachLiveCamera(root: HTMLElement | null | undefined, cam: import('./types').TrafficCamera): () => void {
+  const container = root?.querySelector<HTMLElement>('[data-cam-popup]');
+  const img = container?.querySelector<HTMLImageElement>('[data-cam-img]');
+  const views = cam.views ?? [];
+  if (!container || !img || views.length === 0) return () => {};
+
+  const ageEl = container.querySelector<HTMLElement>('[data-cam-age]');
+  const dirEl = container.querySelector<HTMLElement>('[data-cam-dir]');
+  const linkEl = container.querySelector<HTMLAnchorElement>('[data-cam-link]');
+  let viewId = views[0].id;
+  let stopped = false;
+
+  const refresh = async () => {
+    const url = `${snapshotUrl(viewId)}?t=${Date.now()}`;
+    // Preload, then swap, so the image never flashes blank between refreshes
+    const next = new Image();
+    next.onload = () => {
+      if (!stopped) img.src = url;
+    };
+    next.src = url;
+    try {
+      const res = await fetch(snapshotUrl(viewId), { method: 'HEAD', cache: 'no-store' });
+      if (!stopped && ageEl) ageEl.textContent = describeAge(res.headers.get('Last-Modified'));
+    } catch {
+      if (!stopped && ageEl) ageEl.textContent = 'LIVE MTO SNAPSHOT';
+    }
+  };
+
+  const onClick = (e: Event) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-cam-view]');
+    if (!btn) return;
+    viewId = Number(btn.dataset.camView);
+    const view = views.find((v) => v.id === viewId);
+    container.querySelectorAll<HTMLElement>('[data-cam-view]').forEach((b) => {
+      const active = b === btn;
+      b.className = b.className
+        .replace(/bg-\S+ border-\S+ text-\S+/, active ? 'bg-indigo-900 border-indigo-400 text-white' : 'bg-slate-900 border-slate-700 text-slate-400');
+    });
+    if (dirEl && view) dirEl.textContent = view.description;
+    if (linkEl) linkEl.href = `https://511on.ca/map/Cctv/${viewId}`;
+    if (ageEl) ageEl.textContent = 'Loading…';
+    void refresh();
+  };
+
+  container.addEventListener('click', onClick);
+  void refresh();
+  const timer = window.setInterval(() => {
+    if (!document.hidden) void refresh();
+  }, REFRESH_MS);
+
+  return () => {
+    stopped = true;
+    window.clearInterval(timer);
+    container.removeEventListener('click', onClick);
+  };
 }
