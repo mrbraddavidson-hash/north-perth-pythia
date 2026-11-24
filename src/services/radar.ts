@@ -68,3 +68,29 @@ export function getRadarTileUrl(host: string, path: string, colorScheme: number 
   // 1_1 = smooth precipitation + snow colors
   return `${host}${path}/256/{z}/{x}/{y}/${colorScheme}/1_1.png`;
 }
+
+// Environment Canada (GeoMet) radar scan times, newest last.
+// The WMS time dimension is "start/end/PT6M"; we take the latest `count` steps.
+export async function fetchEcccRadarTimes(count = 8): Promise<string[]> {
+  try {
+    const res = await fetch(
+      'https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetCapabilities&layer=RADAR_1KM_RRAI'
+    );
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const m = xml.match(/<Dimension name="time"[^>]*>\s*([^/<\s]+)\/([^/<\s]+)\/PT(\d+)M\s*<\/Dimension>/);
+    if (!m) return [];
+    const start = Date.parse(m[1]);
+    const end = Date.parse(m[2]);
+    const stepMs = Number(m[3]) * 60_000;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || !stepMs) return [];
+    const times: string[] = [];
+    for (let t = end; t >= start && times.length < count; t -= stepMs) {
+      times.unshift(new Date(t).toISOString().replace('.000Z', 'Z'));
+    }
+    return times;
+  } catch (err) {
+    console.warn('ECCC radar times unavailable:', err);
+    return [];
+  }
+}

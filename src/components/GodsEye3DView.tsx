@@ -15,6 +15,7 @@ import {
 import { NORTH_PERTH_COORDS, NORTH_PERTH_TOWNS } from '../services/api';
 import { NORTH_PERTH_AGRI_HUBS } from '../services/agri';
 import { cameraPopupHtml, attachLiveCamera } from '../services/cameras';
+import { fetchEcccRadarTimes } from '../services/radar';
 import type { TrafficCamera } from '../services/types';
 import { MilitaryFlight, CANADIAN_MILITARY_INSTALLATIONS } from '../services/godseye';
 import { MaritimeVessel } from '../services/maritime';
@@ -38,15 +39,21 @@ import {
   Pause,
 } from 'lucide-react';
 
-// Environment Canada 1 km radar (rain + snow are separate WMS layers; GeoMet allows one layer per request).
-// No TIME parameter = latest scan; `_t` busts the tile cache on refresh. ECCC updates every ~6 minutes.
-const RADAR_LAYERS = [
-  { id: 'radar-rain-layer', source: 'eccc-radar-rain', wms: 'RADAR_1KM_RRAI' },
-  { id: 'radar-snow-layer', source: 'eccc-radar-snow', wms: 'RADAR_1KM_RSNO' },
+// Environment Canada 1 km radar, animated. Rain and snow are separate WMS layers (GeoMet allows one
+// layer per request). Every frame is its own hidden raster layer so the loop swaps instantly once loaded.
+const RADAR_PRODUCTS = [
+  { key: 'rain', wms: 'RADAR_1KM_RRAI' },
+  { key: 'snow', wms: 'RADAR_1KM_RSNO' },
 ] as const;
-const RADAR_REFRESH_MS = 6 * 60 * 1000;
-const ecccRadarTiles = (wmsLayer: string, stamp: number) =>
-  `https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetMap&layers=${wmsLayer}&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true&_t=${stamp}`;
+const RADAR_FRAME_COUNT = 8; // 8 scans x 6 min = ~45 min loop
+const RADAR_REFRESH_MS = 6 * 60 * 1000; // ECCC publishes a scan every 6 minutes
+const RADAR_FRAME_MS = 700;
+const RADAR_LAST_FRAME_HOLD = 3; // linger on the latest scan for 3 ticks
+const radarFrameId = (product: string, time: string) => `radar-${product}-${time}`;
+const ecccRadarTiles = (wmsLayer: string, time: string) =>
+  `https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetMap&layers=${wmsLayer}&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true&time=${time}`;
+const formatRadarTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit' });
 
 interface GodsEye3DViewProps {
   layers: ActiveLayers;
@@ -92,6 +99,9 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
 
   // Auto-Orbit Recon State
   const [isOrbiting, setIsOrbiting] = useState<boolean>(false);
+  const [radarTimes, setRadarTimes] = useState<string[]>([]);
+  const [radarFrame, setRadarFrame] = useState<number>(0);
+  const [isRadarPlaying, setIsRadarPlaying] = useState<boolean>(true);
   const orbitReqRef = useRef<number | null>(null);
 
   // Markers cache
@@ -136,17 +146,6 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
             tileSize: 256,
             maxzoom: 18,
           },
-          ...Object.fromEntries(
-            RADAR_LAYERS.map((r) => [
-              r.source,
-              {
-                type: 'raster' as const,
-                tiles: [ecccRadarTiles(r.wms, Date.now())],
-                tileSize: 256,
-                attribution: 'Radar © Environment and Climate Change Canada',
-              },
-            ])
-          ),
           'dem-terrain': {
             type: 'raster-dem',
             tiles: [
@@ -165,13 +164,6 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
             minzoom: 0,
             maxzoom: 22,
           },
-          ...RADAR_LAYERS.map((r) => ({
-            id: r.id,
-            type: 'raster' as const,
-            source: r.source,
-            layout: { visibility: 'none' as const },
-            paint: { 'raster-opacity': 0.65, 'raster-fade-duration': 0 },
-          })),
           {
             id: 'roads-layer',
             type: 'raster',
@@ -259,36 +251,93 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
     else if (opticMode === 'crt') el.classList.add('optic-crt');
   }, [opticMode]);
 
-  // Live Doppler radar: follow the Radar layer toggle and opacity slider
+  // ---- Animated Doppler radar ----
+  // Keep the frame list fresh (latest 8 ECCC scans) while the radar layer is on
+  useEffect(() => {
+    if (!layers.radar) return;
+    let cancelled = false;
+    const load = async () => {
+      if (document.hidden) return;
+      const times = await fetchEcccRadarTimes(RADAR_FRAME_COUNT);
+      if (!cancelled && times.length > 0) setRadarTimes(times);
+    };
+    load();
+    const timer = window.setInterval(load, RADAR_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [layers.radar]);
+
+  // Add one raster layer per scan (rain + snow) and drop scans that aged out
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const apply = () => {
-      RADAR_LAYERS.forEach((r) => {
-        map.setLayoutProperty(r.id, 'visibility', layers.radar ? 'visible' : 'none');
-        map.setPaintProperty(r.id, 'raster-opacity', radarOpacity);
-      });
+    const sync = () => {
+      const wanted = new Set(radarTimes.flatMap((t) => RADAR_PRODUCTS.map((p) => radarFrameId(p.key, t))));
+      map.getStyle().layers
+        .filter((l) => l.id.startsWith('radar-') && !wanted.has(l.id))
+        .forEach((l) => {
+          map.removeLayer(l.id);
+          if (map.getSource(l.id)) map.removeSource(l.id);
+        });
+      radarTimes.forEach((t) =>
+        RADAR_PRODUCTS.forEach((p) => {
+          const id = radarFrameId(p.key, t);
+          if (map.getLayer(id)) return;
+          map.addSource(id, {
+            type: 'raster',
+            tiles: [ecccRadarTiles(p.wms, t)],
+            tileSize: 256,
+            attribution: 'Radar © Environment and Climate Change Canada',
+          });
+          // Below roads/labels so they stay readable; opacity 0 still preloads tiles
+          map.addLayer(
+            { id, type: 'raster', source: id, paint: { 'raster-opacity': 0, 'raster-fade-duration': 0 } },
+            'roads-layer'
+          );
+        })
+      );
+      setRadarFrame((f) => Math.min(f, Math.max(0, radarTimes.length - 1)));
     };
-    if (map.getLayer(RADAR_LAYERS[0].id)) apply();
-    else map.once('load', apply);
+    if (map.getLayer('roads-layer')) sync();
+    else map.once('load', sync);
     return () => {
-      map.off('load', apply);
+      map.off('load', sync);
     };
-  }, [layers.radar, radarOpacity]);
+  }, [radarTimes]);
 
-  // Pull the latest radar scan periodically while the layer is on
+  // Advance the loop (holding a moment on the latest scan)
   useEffect(() => {
-    if (!layers.radar) return;
+    if (!layers.radar || !isRadarPlaying || radarTimes.length <= 1) return;
+    let hold = 0;
     const timer = window.setInterval(() => {
-      const map = mapRef.current;
-      if (!map || document.hidden) return;
-      const stamp = Date.now();
-      RADAR_LAYERS.forEach((r) => {
-        (map.getSource(r.source) as maplibregl.RasterTileSource | undefined)?.setTiles([ecccRadarTiles(r.wms, stamp)]);
+      setRadarFrame((f) => {
+        if (f === radarTimes.length - 1 && hold < RADAR_LAST_FRAME_HOLD) {
+          hold += 1;
+          return f;
+        }
+        hold = 0;
+        return (f + 1) % radarTimes.length;
       });
-    }, RADAR_REFRESH_MS);
+    }, RADAR_FRAME_MS);
     return () => window.clearInterval(timer);
-  }, [layers.radar]);
+  }, [layers.radar, isRadarPlaying, radarTimes.length]);
+
+  // Show only the current scan, at the user's opacity; hide everything when the layer is off
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const current = radarTimes[radarFrame];
+    radarTimes.forEach((t) =>
+      RADAR_PRODUCTS.forEach((p) => {
+        const id = radarFrameId(p.key, t);
+        if (!map.getLayer(id)) return;
+        map.setLayoutProperty(id, 'visibility', layers.radar ? 'visible' : 'none');
+        map.setPaintProperty(id, 'raster-opacity', layers.radar && t === current ? radarOpacity : 0);
+      })
+    );
+  }, [radarTimes, radarFrame, radarOpacity, layers.radar]);
 
   // Sync 3D Markers (Aircraft, Military, Ships, Towns, River Gauges)
   useEffect(() => {
@@ -636,6 +685,37 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
           </button>
         )}
       </div>
+
+      {/* RADAR LOOP CONTROL (bottom right, above the map attribution) */}
+      {layers.radar && radarTimes.length > 0 && (
+        <div className="absolute bottom-10 right-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-950/95 border border-cyan-500/50 font-mono text-[10px] text-slate-300 shadow-[0_0_15px_rgba(0,242,254,0.15)] backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setIsRadarPlaying((p) => !p)}
+            className="flex items-center justify-center w-5 h-5 rounded-full bg-cyan-950 border border-cyan-500/60 text-cyan-300 hover:text-white cursor-pointer"
+            title={isRadarPlaying ? 'Pause radar loop' : 'Play radar loop'}
+          >
+            {isRadarPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+          </button>
+          <span className="text-cyan-300 font-bold">ECCC RADAR</span>
+          <span className="text-white font-bold tabular-nums">{formatRadarTime(radarTimes[radarFrame] ?? radarTimes[radarTimes.length - 1])}</span>
+          <span className="flex items-center gap-0.5" aria-hidden="true">
+            {radarTimes.map((t, i) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setIsRadarPlaying(false);
+                  setRadarFrame(i);
+                }}
+                className={`w-1.5 h-3 rounded-sm cursor-pointer ${i === radarFrame ? 'bg-cyan-400' : 'bg-slate-700 hover:bg-slate-500'}`}
+                title={formatRadarTime(t)}
+              />
+            ))}
+          </span>
+          {radarFrame === radarTimes.length - 1 && <span className="text-emerald-400 font-bold">LATEST</span>}
+        </div>
+      )}
 
       {/* BOTTOM-LEFT 3D SENSOR TELEMETRY HUD */}
       <div className="absolute bottom-4 left-3 sm:left-4 z-20 bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2 font-mono text-[10px] shadow-[0_0_25px_rgba(0,242,254,0.15)] backdrop-blur-md max-w-md">
