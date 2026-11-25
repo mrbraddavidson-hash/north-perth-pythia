@@ -543,3 +543,25 @@ export const NORTH_PERTH_AGRI_HUBS: AgriHubLocation[] = [
     services: ['Bulk Fertilizer Blending', 'Custom Spraying & Spreading', 'Soil Grid Sampling', 'Seed Distribution'],
   },
 ];
+
+// 9. AAFC Canadian Drought Monitor: end date of the latest monthly map (what the map layer shows by default)
+export async function fetchDroughtMapDate(): Promise<Date | null> {
+  try {
+    const params = new URLSearchParams({
+      where: '1=1',
+      outFields: 'dateEnd',
+      orderByFields: 'dateEnd DESC',
+      resultRecordCount: '1',
+      returnGeometry: 'false',
+      f: 'json',
+    });
+    const res = await fetch(
+      `https://agriculture.canada.ca/imagery-images/rest/services/canadian_drought_monitor/ImageServer/query?${params}`
+    );
+    if (!res.ok) return null;
+    const ms = (await res.json())?.features?.[0]?.attributes?.dateEnd;
+    return typeof ms === 'number' ? new Date(ms) : null;
+  } catch {
+    return null;
+  }
+}

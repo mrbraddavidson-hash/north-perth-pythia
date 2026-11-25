@@ -6,6 +6,7 @@ import { MapView } from './components/Map';
 import { GodsEye3DView } from './components/GodsEye3DView';
 import { AgriFuelModal } from './components/AgriFuelModal';
 import { MunicipalRoadsModal } from './components/MunicipalRoadsModal';
+import { DroughtLegend } from './components/DroughtLegend';
 import {
   ActiveLayers,
   FlightData,
@@ -388,6 +389,13 @@ export function App() {
               cameras={cameras}
               onSwitchTo3D={() => setViewDimension('3d')}
             />
+          )}
+
+          {/* Drought layer legend (both map views) */}
+          {layers.drought && (
+            <div className="absolute left-3 top-14 sm:top-28 z-10 pointer-events-none">
+              <DroughtLegend />
+            </div>
           )}
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
