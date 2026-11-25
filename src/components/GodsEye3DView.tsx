@@ -18,7 +18,7 @@ import { cameraPopupHtml, attachLiveCamera, escapeHtml } from '../services/camer
 import { SquallTrajectory, LISTOWEL_HELIPAD_COORDS } from '../services/squall';
 import { SeismicEvent } from '../services/hazards';
 import { TargetSummary } from './TargetSummary';
-import { fetchEcccRadarTimes } from '../services/radar';
+import { fetchEcccRadarTimes, fetchEcccPrecipSummary, PrecipSummary } from '../services/radar';
 import type { TrafficCamera } from '../services/types';
 import { MilitaryFlight, CANADIAN_MILITARY_INSTALLATIONS } from '../services/godseye';
 import { MaritimeVessel } from '../services/maritime';
@@ -149,6 +149,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   const [radarTimes, setRadarTimes] = useState<string[]>([]);
   const [radarFrame, setRadarFrame] = useState<number>(0);
   const [isRadarPlaying, setIsRadarPlaying] = useState<boolean>(true);
+  const [precip, setPrecip] = useState<PrecipSummary | null>(null);
   const [isFollowing, setIsFollowing] = useState<boolean>(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState<boolean>(false);
   const [showTelemetry, setShowTelemetry] = useState<boolean>(false);
@@ -409,6 +410,19 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [layers.radar]);
+
+  // Is anything on radar near North Perth in the latest scan? (Empty radar otherwise looks "broken")
+  const latestRadarTime = radarTimes[radarTimes.length - 1];
+  useEffect(() => {
+    if (!layers.radar || !latestRadarTime) return;
+    let cancelled = false;
+    fetchEcccPrecipSummary(latestRadarTime).then((summary) => {
+      if (!cancelled) setPrecip(summary);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.radar, latestRadarTime]);
 
   // Add one raster layer per scan (rain + snow) and drop scans that aged out
   useEffect(() => {
@@ -964,6 +978,45 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
             ))}
           </span>
           {radarFrame === radarTimes.length - 1 && <span className="text-emerald-400 font-bold">LATEST</span>}
+          {precip && (
+            <span className="pl-2 border-l border-slate-700 flex items-center gap-1.5">
+              {precip.hasPrecip ? (
+                <>
+                  <span className="text-sky-300 font-bold">
+                    {precip.nearestKm !== null && precip.nearestKm < 3
+                      ? 'PRECIP OVERHEAD'
+                      : `PRECIP ${precip.nearestKm} KM ${precip.bearing ?? ''}`.trim()}
+                  </span>
+                  {(precip.nearestKm ?? 0) > 10 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const map = mapRef.current;
+                        if (!map || !precip.nearest) return;
+                        setIsOrbiting(false);
+                        // Frame both Listowel and the nearest precipitation, top-down
+                        map.fitBounds(
+                          [
+                            [Math.min(NORTH_PERTH_COORDS[1], precip.nearest.lon), Math.min(NORTH_PERTH_COORDS[0], precip.nearest.lat)],
+                            [Math.max(NORTH_PERTH_COORDS[1], precip.nearest.lon), Math.max(NORTH_PERTH_COORDS[0], precip.nearest.lat)],
+                          ],
+                          { padding: 80, pitch: 0, bearing: 0, duration: 1500, maxZoom: 10 }
+                        );
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-sky-950 border border-sky-500/50 text-sky-300 hover:text-white cursor-pointer"
+                      title="Zoom out to see the precipitation on radar"
+                    >
+                      SHOW
+                    </button>
+                  )}
+                </>
+              ) : (
+                <span className="text-slate-400" title="Nothing on Environment Canada radar within ~250 km of Listowel in the latest scan">
+                  CLEAR · NO PRECIP NEARBY
+                </span>
+              )}
+            </span>
+          )}
         </div>
       )}
 

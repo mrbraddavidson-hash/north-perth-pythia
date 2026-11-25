@@ -94,3 +94,73 @@ export async function fetchEcccRadarTimes(count = 8): Promise<string[]> {
     return [];
   }
 }
+
+// Is anything actually on the ECCC radar near North Perth? Renders the rain + snow layers for a
+// ~250 km box at one scan time into a canvas and finds the nearest non-transparent pixel.
+// (GeoMet sends Access-Control-Allow-Origin: *, so the canvas stays readable.)
+export interface PrecipSummary {
+  hasPrecip: boolean;
+  nearestKm: number | null;
+  bearing: string | null; // e.g. "NW", from Listowel
+  nearest: { lat: number; lon: number } | null;
+}
+
+const PRECIP_BOX = { south: 41.5, north: 46.0, west: -84.0, east: -77.5 }; // lat/lon, EPSG:4326
+const PRECIP_W = 260;
+const PRECIP_H = 180;
+const LISTOWEL = { lat: 43.7317, lon: -80.9525 };
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+export async function fetchEcccPrecipSummary(time: string): Promise<PrecipSummary | null> {
+  try {
+    const { south, north, west, east } = PRECIP_BOX;
+    const url = (layer: string) =>
+      `https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetMap&layers=${layer}&styles=` +
+      `&crs=EPSG:4326&bbox=${south},${west},${north},${east}&width=${PRECIP_W}&height=${PRECIP_H}` +
+      `&format=image/png&transparent=true&time=${time}`;
+    const images = await Promise.all(['RADAR_1KM_RRAI', 'RADAR_1KM_RSNO'].map((l) => loadImage(url(l))));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = PRECIP_W;
+    canvas.height = PRECIP_H;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    images.forEach((img) => ctx.drawImage(img, 0, 0));
+    const { data } = ctx.getImageData(0, 0, PRECIP_W, PRECIP_H);
+
+    let best: { km: number; dLat: number; dLon: number } | null = null;
+    const cosLat = Math.cos((LISTOWEL.lat * Math.PI) / 180);
+    for (let y = 0; y < PRECIP_H; y++) {
+      for (let x = 0; x < PRECIP_W; x++) {
+        if (data[(y * PRECIP_W + x) * 4 + 3] === 0) continue;
+        const lat = north - ((y + 0.5) / PRECIP_H) * (north - south);
+        const lon = west + ((x + 0.5) / PRECIP_W) * (east - west);
+        const dLat = lat - LISTOWEL.lat;
+        const dLon = lon - LISTOWEL.lon;
+        const km = Math.hypot(dLat * 111.32, dLon * 111.32 * cosLat);
+        if (!best || km < best.km) best = { km, dLat, dLon };
+      }
+    }
+    if (!best) return { hasPrecip: false, nearestKm: null, bearing: null, nearest: null };
+
+    const deg = ((Math.atan2(best.dLon * cosLat, best.dLat) * 180) / Math.PI + 360) % 360;
+    const bearing = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(deg / 45) % 8];
+    return {
+      hasPrecip: true,
+      nearestKm: Math.round(best.km),
+      bearing: best.km < 3 ? null : bearing,
+      nearest: { lat: LISTOWEL.lat + best.dLat, lon: LISTOWEL.lon + best.dLon },
+    };
+  } catch {
+    return null;
+  }
+}
