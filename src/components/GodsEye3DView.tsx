@@ -267,12 +267,20 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
 
     mapRef.current = map;
 
-    // Compact attribution starts expanded; collapse it to the ⓘ button once the map is up
-    map.once('load', () => {
-      containerRef.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+    // Compact attribution opens itself expanded the first time sources bring credits (any time after
+    // 'load', and 'idle' may never fire while the radar loop repaints). Collapse it to the ⓘ button
+    // the first time that happens; the user can still tap ⓘ to read the credits.
+    const attrib = containerRef.current?.querySelector('.maplibregl-ctrl-attrib');
+    const attribObserver = new MutationObserver(() => {
+      if (attrib?.classList.contains('maplibregl-compact-show')) {
+        attrib.classList.remove('maplibregl-compact-show');
+        attribObserver.disconnect();
+      }
     });
+    if (attrib) attribObserver.observe(attrib, { attributes: true, attributeFilter: ['class'] });
 
     return () => {
+      attribObserver.disconnect();
       if (orbitReqRef.current) cancelAnimationFrame(orbitReqRef.current);
       map.remove();
       mapRef.current = null;
@@ -939,7 +947,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
 
       {/* RADAR LOOP CONTROL (bottom right, above the map attribution) */}
       {layers.radar && radarTimes.length > 0 && (
-        <div className="absolute bottom-16 sm:bottom-10 right-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-950/95 border border-cyan-500/50 font-mono text-[10px] text-slate-300 shadow-[0_0_15px_rgba(0,242,254,0.15)] backdrop-blur-md">
+        <div className="absolute bottom-16 sm:bottom-10 right-3 z-20 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 max-w-[17rem] sm:max-w-none whitespace-nowrap px-2.5 py-1 rounded-2xl sm:rounded-full bg-slate-950/95 border border-cyan-500/50 font-mono text-[10px] text-slate-300 shadow-[0_0_15px_rgba(0,242,254,0.15)] backdrop-blur-md">
           <button
             type="button"
             onClick={() => setIsRadarPlaying((p) => !p)}
@@ -950,7 +958,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
           </button>
           <span className="text-cyan-300 font-bold">ECCC RADAR</span>
           <span className="text-white font-bold tabular-nums">{formatRadarTime(radarTimes[radarFrame] ?? radarTimes[radarTimes.length - 1])}</span>
-          <span className="flex items-center gap-0.5" aria-hidden="true">
+          <span className="hidden sm:flex items-center gap-0.5" aria-hidden="true">
             {radarTimes.map((t, i) => (
               <button
                 key={t}
@@ -967,7 +975,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
           {radarFrame === radarTimes.length - 1 && <span className="text-emerald-400 font-bold">LATEST</span>}
           <RadarPrecipStatus
             time={radarTimes[radarTimes.length - 1]}
-            className="pl-2 border-l border-slate-700"
+            className="w-full sm:w-auto justify-end sm:pl-2 sm:border-l border-slate-700"
             onShow={(nearest) => {
               const map = mapRef.current;
               if (!map) return;

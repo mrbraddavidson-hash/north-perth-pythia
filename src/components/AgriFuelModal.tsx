@@ -140,18 +140,19 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded hover:bg-slate-900 text-slate-400 hover:text-white transition-colors cursor-pointer"
+          className="absolute top-3 right-3 z-10 p-1.5 rounded bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 hover:text-white transition-colors cursor-pointer"
+          aria-label="Close"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-emerald-500/20 pb-3">
+        <div className="flex items-center gap-3 border-b border-emerald-500/20 pb-3 pr-10">
           <div className="flex items-center justify-center w-10 h-10 rounded bg-emerald-950/80 border border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
             <Sprout className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="font-tactical text-base font-bold text-white tracking-wider flex items-center gap-2">
+            <h2 className="font-tactical text-sm sm:text-base font-bold text-white tracking-wider flex items-center gap-2">
               NORTH PERTH // AGRONOMY & GRAIN INTEL
             </h2>
             <p className="text-[11px] text-slate-400">
@@ -161,10 +162,10 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1 border-b border-slate-800 my-3 overflow-x-auto text-xs font-tactical">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 border-b border-slate-800 my-3 sm:overflow-x-auto text-xs font-tactical">
           <button
             onClick={() => setActiveTab('spray')}
-            className={`flex items-center gap-1.5 px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'spray'
                 ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -175,7 +176,7 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('soil')}
-            className={`flex items-center gap-1.5 px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'soil'
                 ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -186,7 +187,7 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('chu')}
-            className={`flex items-center gap-1.5 px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'chu'
                 ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -197,7 +198,7 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('basis')}
-            className={`flex items-center gap-1.5 px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'basis'
                 ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -208,7 +209,7 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('drought')}
-            className={`flex items-center gap-1.5 px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 font-semibold tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'drought'
                 ? 'border-emerald-400 text-emerald-400 bg-emerald-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'

@@ -89,6 +89,15 @@ body {
   font-family: 'JetBrains Mono', monospace !important;
 }
 
+/* Phones: the map-style bar, radar player and toolbar fill the bottom edge,
+   so lift the 2D zoom buttons to the middle of the right edge. */
+@media (max-width: 639px) {
+  .leaflet-bottom.leaflet-right {
+    bottom: 50%;
+    transform: translateY(50%);
+  }
+}
+
 .leaflet-div-icon {
   background: transparent !important;
   border: none !important;

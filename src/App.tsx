@@ -30,7 +30,7 @@ import {
   SeismicEvent,
 } from './services/hazards';
 import { fetchLiveMilitaryFlights, MilitaryFlight } from './services/godseye';
-import { Layers, Activity, X, Sprout, CloudSun, Construction } from 'lucide-react';
+import { Layers, Activity, Sprout, CloudSun, Construction } from 'lucide-react';
 
 export function App() {
   const [isAgriModalOpen, setIsAgriModalOpen] = useState<boolean>(false);
@@ -494,21 +494,7 @@ export function App() {
           <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
             <div className="absolute inset-0" onClick={() => setMobileDrawer('none')} />
             <div className="relative z-50 w-full max-h-[80dvh] flex flex-col bg-slate-950 border-t border-cyan-500/40 shadow-2xl animate-slide-up rounded-t-xl overflow-hidden">
-              <div className="flex items-center justify-between p-3 border-b border-cyan-500/20 bg-slate-900/80">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-cyan-400" />
-                  <span className="font-tactical text-sm font-bold text-white tracking-wider">
-                    INTELLIGENCE LAYERS
-                  </span>
-                </div>
-                <button
-                  onClick={() => setMobileDrawer('none')}
-                  className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto [&>aside]:w-full [&>aside]:border-0">
                 <LayerControlPanel
                   layers={layers}
                   onToggleLayer={handleToggleLayer}
@@ -532,21 +518,7 @@ export function App() {
           <div className="lg:hidden fixed inset-0 z-40 flex flex-col justify-end bg-black/60 backdrop-blur-xs">
             <div className="absolute inset-0" onClick={() => setMobileDrawer('none')} />
             <div className="relative z-50 w-full max-h-[82dvh] flex flex-col bg-slate-950 border-t border-amber-500/40 shadow-2xl animate-slide-up rounded-t-xl overflow-hidden">
-              <div className="flex items-center justify-between p-3 border-b border-amber-500/20 bg-slate-900/80">
-                <div className="flex items-center gap-2">
-                  <Sprout className="w-4 h-4 text-emerald-400" />
-                  <span className="font-tactical text-sm font-bold text-white tracking-wider">
-                    AGRI-OPERATIONS // PERTH COUNTY
-                  </span>
-                </div>
-                <button
-                  onClick={() => setMobileDrawer('none')}
-                  className="p-1 rounded bg-slate-800 text-slate-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto [&>aside]:w-full [&>aside]:border-0">
                 <RightIntelPanel
                   weather={weather}
                   riverGauges={riverGauges}
