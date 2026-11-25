@@ -18,6 +18,7 @@ import { MaritimeVessel } from '../services/maritime';
 import { OpticMode } from '../services/types';
 import { cameraPopupHtml, attachLiveCamera } from '../services/cameras';
 import { TargetSummary } from './TargetSummary';
+import { RadarPrecipStatus } from './RadarPrecipStatus';
 import {
   fetchLiveRadarData,
   getRadarTileUrl,
@@ -1442,6 +1443,19 @@ export const MapView: React.FC<MapProps> = ({
               </div>
             </>
           )}
+
+          {/* What's actually on radar near North Perth (latest ECCC scan) */}
+          <div className="mt-1.5 pt-1.5 border-t border-slate-800">
+            <RadarPrecipStatus
+              onShow={(nearest) => {
+                if (!mapInstanceRef.current) return;
+                mapInstanceRef.current.flyToBounds(
+                  L.latLngBounds([NORTH_PERTH_COORDS, [nearest.lat, nearest.lon]]),
+                  { padding: [60, 60], maxZoom: 10, duration: 1.5 }
+                );
+              }}
+            />
+          </div>
         </div>
       )}
 
