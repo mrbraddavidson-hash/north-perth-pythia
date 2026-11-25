@@ -18,7 +18,7 @@ import {
   Building2,
   Camera,
 } from 'lucide-react';
-import { ActiveLayers } from '../services/types';
+import { ActiveLayers, OpticMode } from '../services/types';
 
 interface LayerControlPanelProps {
   layers: ActiveLayers;
@@ -29,6 +29,8 @@ interface LayerControlPanelProps {
   vesselCount?: number;
   milFlightCount?: number;
   camCount?: number;
+  opticMode?: OpticMode;
+  onChangeOpticMode?: (mode: OpticMode) => void;
   onClose?: () => void;
 }
 
@@ -41,6 +43,8 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
   vesselCount = 0,
   milFlightCount = 0,
   camCount = 0,
+  opticMode = 'normal',
+  onChangeOpticMode,
   onClose,
 }) => {
   const layerItems: {
@@ -266,6 +270,37 @@ export const LayerControlPanel: React.FC<LayerControlPanelProps> = ({
               onChange={(e) => onChangeRadarOpacity(parseFloat(e.target.value))}
               className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
             />
+          </div>
+        )}
+
+        {/* View filter (moved here from the header) */}
+        {onChangeOpticMode && (
+          <div className="mt-3 p-2.5 rounded bg-slate-900/60 border border-cyan-500/20 text-xs font-mono space-y-1.5">
+            <div className="text-[11px] text-cyan-300">View Filter</div>
+            <div className="grid grid-cols-4 gap-1">
+              {(
+                [
+                  ['normal', 'STD', 'Standard colour'],
+                  ['flir', 'FLIR', 'Thermal-style (white hot)'],
+                  ['nvg', 'NVG', 'Night-vision green'],
+                  ['crt', 'CRT', 'Monitor scanlines'],
+                ] as [OpticMode, string, string][]
+              ).map(([mode, label, title]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onChangeOpticMode(mode)}
+                  title={title}
+                  className={`py-1 rounded border text-[10px] font-bold cursor-pointer transition-colors ${
+                    opticMode === mode
+                      ? 'bg-cyan-500 text-black border-cyan-400'
+                      : 'bg-black/40 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

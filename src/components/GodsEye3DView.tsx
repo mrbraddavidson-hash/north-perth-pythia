@@ -116,7 +116,6 @@ interface GodsEye3DViewProps {
   cameras?: TrafficCamera[];
   squallTrajectory?: SquallTrajectory | null;
   earthquakes?: SeismicEvent[];
-  onSwitchTo2D?: () => void;
 }
 
 export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
@@ -135,7 +134,6 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   cameras = [],
   squallTrajectory = null,
   earthquakes = [],
-  onSwitchTo2D,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -152,6 +150,8 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   const [radarFrame, setRadarFrame] = useState<number>(0);
   const [isRadarPlaying, setIsRadarPlaying] = useState<boolean>(true);
   const [isFollowing, setIsFollowing] = useState<boolean>(false);
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState<boolean>(false);
+  const [showTelemetry, setShowTelemetry] = useState<boolean>(false);
   const orbitReqRef = useRef<number | null>(null);
 
   // Markers cache
@@ -266,6 +266,11 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
 
     mapRef.current = map;
 
+    // Compact attribution starts expanded; collapse it to the ⓘ button once the map is up
+    map.once('load', () => {
+      containerRef.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+    });
+
     return () => {
       if (orbitReqRef.current) cancelAnimationFrame(orbitReqRef.current);
       map.remove();
@@ -304,6 +309,18 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
     else if (opticMode === 'nvg') el.classList.add('optic-nvg');
     else if (opticMode === 'crt') el.classList.add('optic-crt');
   }, [opticMode]);
+
+  // Fly to coordinates requested elsewhere in the app (e.g. the header's ISS button)
+  useEffect(() => {
+    const onFocus = (e: Event) => {
+      const { coords, zoom: z } = (e as CustomEvent<{ coords: [number, number]; zoom?: number }>).detail ?? {};
+      if (!coords || !mapRef.current) return;
+      setIsOrbiting(false);
+      mapRef.current.flyTo({ center: [coords[1], coords[0]], zoom: z ?? 4, pitch: 40, duration: 1800 });
+    };
+    window.addEventListener('focus-coordinates', onFocus);
+    return () => window.removeEventListener('focus-coordinates', onFocus);
+  }, []);
 
   // ---- Area overlays: drought, squall corridor, helipad approach ring, ISS footprint ----
   useEffect(() => {
@@ -373,15 +390,23 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
     if (!layers.radar) return;
     let cancelled = false;
     const load = async () => {
-      if (document.hidden) return;
       const times = await fetchEcccRadarTimes(RADAR_FRAME_COUNT);
       if (!cancelled && times.length > 0) setRadarTimes(times);
     };
+    // Always load once (even in a background tab); skip periodic refreshes while hidden,
+    // and catch up as soon as the tab is shown again.
     load();
-    const timer = window.setInterval(load, RADAR_REFRESH_MS);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) load();
+    }, RADAR_REFRESH_MS);
+    const onVisible = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [layers.radar]);
 
@@ -823,73 +848,59 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
         <div className="absolute h-6 w-0.5 bg-cyan-400/60" />
       </div>
 
-      {/* TOP FLOATING RECON BAR & 2D SWITCHER */}
-      <div className="absolute top-3 left-3 sm:left-4 z-20 flex flex-wrap items-center gap-1.5 p-1 rounded bg-slate-950/90 border border-cyan-500/50 backdrop-blur-md font-mono text-[10px] shadow-2xl">
-        <div className="flex items-center gap-1 px-1.5 text-cyan-400 font-bold tracking-wider">
-          <Orbit className="w-3.5 h-3.5 text-cyan-400 animate-spin" style={{ animationDuration: '30s' }} />
-          <span>GOD'S EYE 3D GLOBE</span>
-        </div>
-
-        <div className="h-3 w-px bg-slate-800 mx-0.5" />
-
-        {/* 3D Presets */}
-        <button
-          onClick={() => flyToPreset('north-perth')}
-          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-slate-800 hover:border-cyan-500/50 cursor-pointer font-semibold transition-all"
-        >
-          LISTOWEL 3D
-        </button>
-        <button
-          onClick={() => flyToPreset('theater')}
-          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-cyan-500/50 cursor-pointer font-semibold transition-all"
-        >
-          THEATER (REGIONAL)
-        </button>
-        <button
-          onClick={() => flyToPreset('high-orbit')}
-          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-cyan-500/50 cursor-pointer font-semibold transition-all"
-        >
-          ORBITAL GLOBE
-        </button>
-        <button
-          onClick={() => flyToPreset('top-down')}
-          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-cyan-500/50 cursor-pointer font-semibold transition-all"
-        >
-          TOP DOWN
-        </button>
-
-        <div className="h-3 w-px bg-slate-800 mx-0.5" />
-
-        {/* Orbit Sweep Toggle */}
-        <button
-          onClick={() => setIsOrbiting(!isOrbiting)}
-          className={`flex items-center gap-1 px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
-            isOrbiting
-              ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_#00f2fe]'
-              : 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-800'
-          }`}
-          title="Auto-rotate camera 360° continuously around target"
-        >
-          <RotateCw className={`w-3 h-3 ${isOrbiting ? 'animate-spin' : ''}`} />
-          <span>{isOrbiting ? 'ORBITING 360°' : 'ORBIT 360°'}</span>
-        </button>
-
-        {/* 2D Tactical View Switcher */}
-        {onSwitchTo2D && (
+      {/* VIEW MENU (camera presets + orbit) */}
+      <div className="absolute top-3 left-3 sm:left-4 z-30 font-mono text-[10px]">
+        <div className="flex items-center gap-1">
           <button
-            onClick={onSwitchTo2D}
-            className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-300 font-bold shadow-[0_0_10px_rgba(16,185,129,0.3)] cursor-pointer transition-all ml-1"
-            title="Switch back to standard 2D Leaflet Tactical Map"
+            type="button"
+            onClick={() => setIsViewMenuOpen((o) => !o)}
+            aria-expanded={isViewMenuOpen}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950/90 border border-cyan-500/50 text-cyan-300 hover:text-white font-bold backdrop-blur-md shadow-xl cursor-pointer"
           >
-            <Layers className="w-3 h-3 text-emerald-400" />
-            <span>SWITCH TO 2D MAP</span>
+            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+            VIEW <span className="text-slate-500">▾</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setIsOrbiting(!isOrbiting)}
+            className={`flex items-center gap-1 px-2 py-1 rounded border font-bold backdrop-blur-md cursor-pointer ${
+              isOrbiting ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'bg-slate-950/90 text-cyan-300 border-cyan-500/50 hover:text-white'
+            }`}
+            title="Slowly rotate the camera around the centre"
+          >
+            <RotateCw className={`w-3 h-3 ${isOrbiting ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isOrbiting ? 'ORBITING' : 'ORBIT'}</span>
+          </button>
+        </div>
+        {isViewMenuOpen && (
+          <div className="mt-1 w-44 rounded bg-slate-950/95 border border-cyan-500/50 backdrop-blur-md shadow-2xl overflow-hidden">
+            {(
+              [
+                ['north-perth', 'Listowel 3D'],
+                ['theater', 'Regional'],
+                ['high-orbit', 'Orbital globe'],
+                ['top-down', 'Top down'],
+              ] as const
+            ).map(([target, label]) => (
+              <button
+                key={target}
+                type="button"
+                onClick={() => {
+                  flyToPreset(target);
+                  setIsViewMenuOpen(false);
+                }}
+                className="block w-full text-left px-3 py-1.5 text-slate-300 hover:bg-cyan-950 hover:text-white cursor-pointer"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
       {/* TARGET TRACKING CARD (selected aircraft / vessel) */}
       {(selectedFlight || selectedVessel) && (
-        <div className="absolute top-32 right-3 z-20 w-72 bg-slate-950/95 border border-cyan-400 rounded-lg p-3 font-mono text-xs shadow-[0_0_30px_rgba(0,242,254,0.25)] backdrop-blur-md">
+        <div className="absolute top-28 right-3 z-20 w-72 bg-slate-950/95 border border-cyan-400 rounded-lg p-3 font-mono text-xs shadow-[0_0_30px_rgba(0,242,254,0.25)] backdrop-blur-md">
           <div className="flex items-center justify-between pb-1.5 border-b border-cyan-500/30 mb-2">
             <div className="flex items-center gap-1.5">
               <Target className="w-4 h-4 text-cyan-400" />
@@ -927,7 +938,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
 
       {/* RADAR LOOP CONTROL (bottom right, above the map attribution) */}
       {layers.radar && radarTimes.length > 0 && (
-        <div className="absolute bottom-10 right-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-950/95 border border-cyan-500/50 font-mono text-[10px] text-slate-300 shadow-[0_0_15px_rgba(0,242,254,0.15)] backdrop-blur-md">
+        <div className="absolute bottom-16 sm:bottom-10 right-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-950/95 border border-cyan-500/50 font-mono text-[10px] text-slate-300 shadow-[0_0_15px_rgba(0,242,254,0.15)] backdrop-blur-md">
           <button
             type="button"
             onClick={() => setIsRadarPlaying((p) => !p)}
@@ -956,37 +967,35 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
         </div>
       )}
 
-      {/* BOTTOM-LEFT 3D SENSOR TELEMETRY HUD */}
-      <div className="absolute bottom-4 left-3 sm:left-4 z-20 bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2 font-mono text-[10px] shadow-[0_0_25px_rgba(0,242,254,0.15)] backdrop-blur-md max-w-md">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-1 mb-1.5">
-          <div className="flex items-center gap-1.5 text-cyan-300 font-bold">
-            <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
-            <span>GOD'S EYE 3D RECON TELEMETRY</span>
+      {/* CAMERA READOUT (collapsed by default; desktop only) */}
+      <div className="hidden sm:block absolute bottom-4 left-4 z-20 font-mono text-[10px]">
+        {showTelemetry ? (
+          <div className="bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2 shadow-xl backdrop-blur-md">
+            <div className="flex items-center justify-between gap-3 text-cyan-300 font-bold mb-1">
+              <span className="flex items-center gap-1">
+                <Crosshair className="w-3 h-3 text-cyan-400" /> CAMERA
+              </span>
+              <button type="button" onClick={() => setShowTelemetry(false)} className="text-slate-400 hover:text-white cursor-pointer" title="Hide">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="text-slate-300 tabular-nums">
+              Pitch {pitch}° · Bearing {bearing}° · Zoom {zoom}
+            </div>
+            <div className="text-slate-500">
+              {Math.abs(center[1])}°{center[1] >= 0 ? 'N' : 'S'}, {Math.abs(center[0])}°{center[0] >= 0 ? 'E' : 'W'} · right-drag to tilt/rotate
+            </div>
           </div>
-          <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/60 px-1 rounded border border-emerald-500/30">
-            WEBGL2 3D DEM
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-slate-300 text-[9px]">
-          <div className="p-1 rounded bg-black/50 border border-slate-800">
-            <span className="text-slate-500">PITCH:</span> <span className="text-white font-bold">{pitch}°</span>
-          </div>
-          <div className="p-1 rounded bg-black/50 border border-slate-800">
-            <span className="text-slate-500">BEARING:</span> <span className="text-white font-bold">{bearing}°</span>
-          </div>
-          <div className="p-1 rounded bg-black/50 border border-slate-800">
-            <span className="text-slate-500">ZOOM:</span> <span className="text-white font-bold">{zoom}</span>
-          </div>
-          <div className="p-1 rounded bg-black/50 border border-slate-800">
-            <span className="text-slate-500">MODE:</span> <span className="text-cyan-400 font-bold uppercase">{opticMode}</span>
-          </div>
-        </div>
-
-        <div className="text-[8px] text-slate-500 pt-1 mt-1 border-t border-slate-800/60 flex items-center justify-between">
-          <span>CENTER: {center[1]}°N, {Math.abs(center[0])}°W</span>
-          <span className="text-slate-400">HOLD RIGHT-CLICK TO TILT / ROTATE 3D</span>
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowTelemetry(true)}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-slate-950/80 border border-slate-700 text-slate-400 hover:text-cyan-300 cursor-pointer"
+            title="Show camera pitch, bearing and zoom"
+          >
+            <Crosshair className="w-3 h-3" /> CAMERA
+          </button>
+        )}
       </div>
     </div>
   );

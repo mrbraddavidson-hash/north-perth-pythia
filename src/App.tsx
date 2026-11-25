@@ -4,7 +4,6 @@ import { LayerControlPanel } from './components/LayerControlPanel';
 import { RightIntelPanel } from './components/RightIntelPanel';
 import { MapView } from './components/Map';
 import { GodsEye3DView } from './components/GodsEye3DView';
-import { SpaceWeatherBar } from './components/SpaceWeatherBar';
 import { AgriFuelModal } from './components/AgriFuelModal';
 import { MunicipalRoadsModal } from './components/MunicipalRoadsModal';
 import {
@@ -310,10 +309,11 @@ export function App() {
         }}
         viewDimension={viewDimension}
         onToggleViewDimension={setViewDimension}
+        aurora={aurora}
+        iss={iss}
+        onTrackIss={handleTrackIss}
       />
 
-      {/* Space Weather & Aurora Kp Ticker */}
-      <SpaceWeatherBar aurora={aurora} iss={iss} onTrackIss={handleTrackIss} />
 
       {/* Agri & Fuel Intel Modal */}
       <MunicipalRoadsModal isOpen={isRoadsModalOpen} onClose={closeRoadsModal} />
@@ -340,6 +340,8 @@ export function App() {
               vesselCount={vessels.length}
               milFlightCount={milFlights.length}
               camCount={cameras.length}
+              opticMode={opticMode}
+              onChangeOpticMode={setOpticMode}
               onClose={() => setIsLeftPanelOpen(false)}
             />
           </div>
@@ -364,7 +366,6 @@ export function App() {
               cameras={cameras}
               squallTrajectory={squallTrajectory}
               earthquakes={earthquakes}
-              onSwitchTo2D={() => setViewDimension('2d')}
             />
           ) : (
             <MapView
@@ -390,7 +391,7 @@ export function App() {
           )}
 
           {/* Quick Floating Toggles (Desktop & Mobile) */}
-          <div className="absolute top-12 sm:top-14 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+          <div className="absolute bottom-3 sm:bottom-auto sm:top-14 left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-none">
             {/* Left Buttons: Layers + Agri Modal Trigger */}
             <div className="flex items-center gap-2 pointer-events-auto">
               {!isLeftPanelOpen && (
@@ -402,7 +403,7 @@ export function App() {
                       setIsLeftPanelOpen(true);
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-cyan-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-cyan-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
                   title="Open Map Layers Control"
                 >
                   <Layers className="w-3.5 h-3.5 text-cyan-400" />
@@ -413,7 +414,7 @@ export function App() {
 
               <button
                 onClick={() => setIsAgriModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
                 title="Open Delta-T Spraying Window & Grain Bids"
               >
                 <Sprout className="w-3.5 h-3.5 text-emerald-400" />
@@ -423,7 +424,7 @@ export function App() {
 
               <button
                 onClick={() => setIsRoadsModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-950/90 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-amber-950/90 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer"
                 title="Municipal road closures, load restrictions & cams (Municipal511)"
               >
                 <Construction className="w-3.5 h-3.5 text-amber-400" />
@@ -444,13 +445,13 @@ export function App() {
                       setIsRightPanelOpen(true);
                     }
                   }}
-                  className={`${isRightPanelOpen ? 'flex lg:hidden' : 'flex'} items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-slate-200 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer`}
+                  className={`${isRightPanelOpen ? 'flex lg:hidden' : 'flex'} items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan-500/50 text-slate-200 font-mono text-xs shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer`}
                   title="Open Live Weather & Telemetry Sidebar"
                 >
                   <CloudSun className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
                   <span className="text-cyan-300 font-bold">{weather?.temperatureC ?? '--'}°C</span>
                   <span className="text-slate-400 text-[11px] hidden sm:inline">{weather?.conditionLabel ?? 'Weather'}</span>
-                  <span className="text-[10px] text-cyan-400 font-bold">◀ INTEL</span>
+                  <span className="hidden sm:inline text-[10px] text-cyan-400 font-bold">◀ INTEL</span>
                 </button>
             </div>
           </div>
@@ -509,6 +510,8 @@ export function App() {
                   vesselCount={vessels.length}
                   milFlightCount={milFlights.length}
               camCount={cameras.length}
+              opticMode={opticMode}
+              onChangeOpticMode={setOpticMode}
                   onClose={() => setMobileDrawer('none')}
                 />
               </div>

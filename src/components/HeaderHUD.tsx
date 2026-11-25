@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { WeatherTelemetry, OpticMode } from '../services/types';
 import { calculateSprayWindow, SprayCondition } from '../services/agri';
+import { AuroraData, IssTelemetry } from '../services/space';
+import { SpaceWeatherBar } from './SpaceWeatherBar';
 
 export type RightPanelTab = 'agri' | 'markets' | 'weather' | 'hubs';
 
@@ -42,6 +44,9 @@ interface HeaderHUDProps {
   onCollapseAllPanels?: () => void;
   viewDimension?: '2d' | '3d';
   onToggleViewDimension?: (dim: '2d' | '3d') => void;
+  aurora?: AuroraData | null;
+  iss?: IssTelemetry | null;
+  onTrackIss?: () => void;
 }
 
 export const HeaderHUD: React.FC<HeaderHUDProps> = ({
@@ -61,6 +66,9 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   onCollapseAllPanels,
   viewDimension = '2d',
   onToggleViewDimension,
+  aurora = null,
+  iss = null,
+  onTrackIss,
 }) => {
   const [timeUtc, setTimeUtc] = useState<string>('');
   const [timeLocal, setTimeLocal] = useState<string>('');
@@ -76,10 +84,13 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
       const now = new Date();
       setTimeUtc(now.toISOString().substring(11, 19) + ' UTC');
       setTimeLocal(
-        now.toLocaleTimeString('en-US', {
+        now.toLocaleTimeString('en-CA', {
           timeZone: 'America/Toronto',
           hour12: false,
-        }) + ' EDT'
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        })
       );
     };
     updateTime();
@@ -237,59 +248,6 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
           </button>
         )}
 
-        {/* Desktop Interface Layout Toggles (Layers, Agri, Grain Bids, Full Map) */}
-        <div className="hidden lg:flex items-center gap-1 bg-black/60 p-0.5 rounded border border-slate-800 text-[10px]">
-          <button
-            onClick={onToggleLeftPanel}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors font-semibold cursor-pointer ${
-              isLeftPanelOpen
-                ? 'bg-emerald-500 text-slate-950 shadow-[0_0_8px_#10b981]'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-            title={isLeftPanelOpen ? 'Hide Layers Sidebar' : 'Show Layers Sidebar'}
-          >
-            <Layers className="w-3 h-3" />
-            <span>LAYERS</span>
-          </button>
-
-          <button
-            onClick={() => onToggleRightPanel?.('agri')}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors font-semibold cursor-pointer ${
-              isRightPanelOpen && rightPanelTab === 'agri'
-                ? 'bg-emerald-500 text-slate-950 shadow-[0_0_8px_#10b981]'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-            title="Open Agri & Soil Intel"
-          >
-            <Sprout className="w-3 h-3 text-emerald-400" />
-            <span>AGRI</span>
-          </button>
-
-          <button
-            onClick={() => onToggleRightPanel?.('markets')}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors font-semibold cursor-pointer ${
-              isRightPanelOpen && rightPanelTab === 'markets'
-                ? 'bg-amber-500 text-slate-950 shadow-[0_0_8px_#f59e0b]'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-            title="Open Grain Elevator Bids & Futures"
-          >
-            <Wheat className="w-3 h-3 text-amber-400" />
-            <span>GRAIN BIDS</span>
-          </button>
-
-          {(isLeftPanelOpen || isRightPanelOpen) && onCollapseAllPanels && (
-            <button
-              onClick={onCollapseAllPanels}
-              className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition-colors font-bold cursor-pointer"
-              title="Collapse all side panels for 100% full map view"
-            >
-              <MapIcon className="w-3 h-3" />
-              <span>FULL MAP</span>
-            </button>
-          )}
-        </div>
-
         {/* 2D / 3D God's Eye Globe Viewport Toggle */}
         {onToggleViewDimension && (
           <div className="flex items-center bg-black/80 rounded border border-cyan-500/50 p-0.5 text-[10px] font-mono shadow-[0_0_12px_rgba(0,242,254,0.25)]">
@@ -314,73 +272,35 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
               title="Switch to 3D God's Eye Globe & Terrain View"
             >
               <Orbit className="w-3 h-3 text-cyan-400" />
-              <span>3D GLOBE</span>
+              <span>3D</span>
             </button>
           </div>
         )}
 
-        {/* God's Eye Sensor Shader Optics (bilawalsidhu/gods-eye-view) */}
-        {onChangeOpticMode && (
-          <div className="hidden sm:flex items-center bg-black/70 rounded border border-cyan-500/40 p-0.5 text-[10px] font-mono shadow-[0_0_12px_rgba(0,242,254,0.1)]">
-            <span className="text-[9px] text-slate-400 px-1.5 uppercase tracking-wider flex items-center gap-1 font-bold">
-              <Eye className="w-3 h-3 text-cyan-400" />
-              OPTIC:
-            </span>
-            <button
-              onClick={() => onChangeOpticMode('normal')}
-              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
-                opticMode === 'normal'
-                  ? 'bg-cyan-500 text-black shadow-[0_0_8px_#00f2fe]'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="Standard High-Clarity Optical"
-            >
-              STD
-            </button>
-            <button
-              onClick={() => onChangeOpticMode('flir')}
-              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
-                opticMode === 'flir'
-                  ? 'bg-rose-500 text-black shadow-[0_0_8px_#f43f5e]'
-                  : 'text-slate-400 hover:text-rose-300'
-              }`}
-              title="FLIR Thermal (White Hot Infrared Simulation)"
-            >
-              FLIR
-            </button>
-            <button
-              onClick={() => onChangeOpticMode('nvg')}
-              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
-                opticMode === 'nvg'
-                  ? 'bg-emerald-400 text-black shadow-[0_0_8px_#34d399]'
-                  : 'text-slate-400 hover:text-emerald-300'
-              }`}
-              title="Night Vision Goggles (Green Phosphor Matrix)"
-            >
-              NVG
-            </button>
-            <button
-              onClick={() => onChangeOpticMode('crt')}
-              className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
-                opticMode === 'crt'
-                  ? 'bg-cyan-400 text-black shadow-[0_0_8px_#22d3ee]'
-                  : 'text-slate-400 hover:text-cyan-300'
-              }`}
-              title="CRT Surveillance Monitor (Raster Scanline Recon)"
-            >
-              CRT
-            </button>
+        {/* Aurora Kp + ISS (was a separate strip under the header) */}
+        {onTrackIss && (
+          <div className="hidden lg:block">
+            <SpaceWeatherBar aurora={aurora} iss={iss} onTrackIss={onTrackIss} />
           </div>
         )}
 
         {/* Local Clock (Hidden on very small screens) */}
-        <div className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded bg-slate-900/90 border border-cyan-500/30 text-slate-200 text-[11px]">
+        <div className="hidden xl:flex items-center gap-1.5 px-2 py-1 rounded bg-slate-900/90 border border-cyan-500/30 text-slate-200 text-[11px]">
           <Clock className="w-3.5 h-3.5 text-cyan-400" />
           <span className="text-cyan-300 font-semibold">{timeLocal}</span>
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1">
+          {(isLeftPanelOpen || isRightPanelOpen) && onCollapseAllPanels && (
+            <button
+              onClick={onCollapseAllPanels}
+              title="Hide side panels (full map)"
+              className="hidden lg:flex p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/50 transition-colors min-h-[32px] min-w-[32px] items-center justify-center cursor-pointer"
+            >
+              <MapIcon className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            </button>
+          )}
           <button
             onClick={onRecenter}
             title="Recenter Map on Listowel"

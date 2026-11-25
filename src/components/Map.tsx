@@ -250,7 +250,7 @@ export const MapView: React.FC<MapProps> = ({
         layers: 'canadian_drought_monitor:canadian_drought_monitor',
         format: 'image/png',
         transparent: true,
-        opacity: 0.65,
+        opacity: 0.3, // light tint so the base map stays readable (matches 3D)
         zIndex: 19,
       }
     );
@@ -446,6 +446,16 @@ export const MapView: React.FC<MapProps> = ({
     }, delay);
     return () => clearTimeout(timeout);
   }, [isPlayingRadar, radarData, radarFrameIndex, layers.radar, radarEngine]);
+
+  // Fly to coordinates requested elsewhere in the app (e.g. the header's ISS button)
+  useEffect(() => {
+    const onFocus = (e: Event) => {
+      const { coords, zoom } = (e as CustomEvent<{ coords: [number, number]; zoom?: number }>).detail ?? {};
+      if (coords && mapInstanceRef.current) mapInstanceRef.current.flyTo(coords, zoom ?? 4, { duration: 1.5 });
+    };
+    window.addEventListener('focus-coordinates', onFocus);
+    return () => window.removeEventListener('focus-coordinates', onFocus);
+  }, []);
 
   // Update AAFC Drought Monitor Layer Visibility
   useEffect(() => {
@@ -1213,7 +1223,7 @@ export const MapView: React.FC<MapProps> = ({
 
       {/* Live Weather Radar Player HUD (Visible when Radar Layer is Active) */}
       {layers.radar && radarData && radarData.frames.length > 0 && (
-        <div className={`absolute bottom-14 sm:bottom-16 left-3 right-3 sm:right-auto sm:left-5 z-20 bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2 font-mono shadow-[0_0_25px_rgba(0,242,254,0.15)] backdrop-blur-md transition-all ${
+        <div className={`absolute bottom-36 sm:bottom-16 left-3 right-3 sm:right-auto sm:left-5 z-20 bg-slate-950/95 border border-cyan-500/50 rounded-lg p-2 font-mono shadow-[0_0_25px_rgba(0,242,254,0.15)] backdrop-blur-md transition-all ${
           isRadarMinimized ? 'max-w-xs' : 'max-w-sm sm:max-w-md p-2.5'
         }`}>
           {isRadarMinimized ? (
@@ -1443,7 +1453,7 @@ export const MapView: React.FC<MapProps> = ({
       )}
 
       {/* Map Style Selector Bar */}
-      <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:bottom-5 sm:left-5 z-20 flex flex-wrap items-center bg-slate-950/95 border border-cyan-500/40 rounded p-1 font-mono text-[10px] sm:text-xs backdrop-blur-md shadow-2xl gap-1 max-w-[calc(100vw-24px)] overflow-x-auto">
+      <div className="absolute bottom-16 left-3 right-3 sm:right-auto sm:bottom-5 sm:left-5 z-20 flex flex-wrap items-center bg-slate-950/95 border border-cyan-500/40 rounded p-1 font-mono text-[10px] sm:text-xs backdrop-blur-md shadow-2xl gap-1 max-w-[calc(100vw-24px)] overflow-x-auto">
         <span className="text-[9px] text-slate-500 px-1.5 uppercase tracking-wider hidden md:inline">
           STYLE:
         </span>
