@@ -68,7 +68,7 @@ export function App() {
     maritime: false,
     helipad: true,
     seismic: false,
-    drought: true,
+    drought: false,
     satellites: false,
   });
 
