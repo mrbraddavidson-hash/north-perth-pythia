@@ -122,12 +122,23 @@ export interface EmergencyDispatch {
   details: string;
 }
 
+// One row from Huron-Perth Student Transportation Services' live alerts (hpsts.mybusplanner.ca)
 export interface SchoolBusAlert {
-  zone: string;
-  title: string;
-  status: 'RUNNING_ON_TIME' | 'DELAYS_REPORTED' | 'ALL_ROUTES_CANCELLED' | 'FOG_HOLD';
-  affectedSchools: string[];
-  notice: string;
+  kind: 'bus' | 'school';
+  appliesTo: string; // YYYY-MM-DD
+  title: string; // bus run (e.g. NEWRY_LDSS_12_AM) or school name
+  operator: string; // bus company; '' for school notices
+  status: string; // e.g. "Delayed 15 minutes", "Cancelled-All Day", "Closed"
+  cancelled: boolean; // cancelled run or closed school
+  schools: string[];
+  reason: string;
+  postedAt: string; // as displayed by HPSTS, e.g. "2026-11-25 6:53 AM"
+  nearListowel: boolean;
+}
+
+export interface SchoolBusStatus {
+  alerts: SchoolBusAlert[]; // near-Listowel first, then cancellations, then delays
+  fetchedAt: Date;
 }
 
 export interface ActiveLayers {

@@ -33,6 +33,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/wateroffice/, '/today/hydrometric'),
       },
+      '/api/hpsts': {
+        target: 'https://hpsts.mybusplanner.ca',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/hpsts/, ''),
+      },
       '/api/511': {
         target: 'https://511on.ca',
         changeOrigin: true,

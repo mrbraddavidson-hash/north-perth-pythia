@@ -9,6 +9,7 @@ import {
   HydroOutage,
   EmergencyDispatch,
   SchoolBusAlert,
+  SchoolBusStatus,
   LiveIncidentEvent,
 } from './types';
 import { NORTH_PERTH_TRAFFIC_CAMERAS, BundledCamera, CAMERA_RADIUS_KM } from './cameras';
@@ -668,9 +669,93 @@ export function getEmergencyDispatches(): EmergencyDispatch[] {
   return [];
 }
 
-// HPSTS School Bus status: Disabled simulated schedules to preserve strict data integrity
-export function getSchoolBusAlerts(): SchoolBusAlert[] {
-  return [];
+// HPSTS school bus alerts (Huron-Perth Student Transportation Services, via /api/hpsts proxy).
+// Schools/places served by North Perth-area runs; used to list those alerts first.
+const NEAR_LISTOWEL = /listowel|north perth|elma|atwood|holy rosary|howick|gorrie|wallace|milverton|mornington|monkton/i;
+
+// The BusPlanner page methods expect the DataTables request their own page sends.
+function hpstsRequestBody(columns: string[]) {
+  return JSON.stringify({
+    alertCondition: { RangeType: '' }, // '' = today
+    dataTableData: {
+      draw: 1,
+      start: 0,
+      length: 200,
+      columns: columns.map((data) => ({ data, name: '', searchable: true, orderable: true, search: { value: '', regex: false } })),
+      order: [{ column: 0, dir: 'asc' }],
+      search: { value: '', regex: false },
+      SortFieldName: columns[0],
+    },
+  });
+}
+
+async function fetchHpsts(method: 'GetBusNotifications' | 'GetSchoolNotifications', columns: string[]): Promise<any[]> {
+  const res = await fetch(`/api/hpsts/Alerts.aspx/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: hpstsRequestBody(columns),
+  });
+  if (!res.ok) throw new Error(`HPSTS ${method} ${res.status}`);
+  const json = await res.json();
+  return Array.isArray(json?.d?.data) ? json.d.data : [];
+}
+
+const splitSchools = (s: unknown) =>
+  String(s ?? '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+// Returns null when the feed can't be reached, so the UI can say "unavailable" instead of "all clear".
+export async function fetchSchoolBusStatus(): Promise<SchoolBusStatus | null> {
+  try {
+    const [buses, schools] = await Promise.all([
+      fetchHpsts('GetBusNotifications', ['AppliesTo', 'RouteRun', 'Operator', 'Action', 'AffectsSchools', 'TransfersSchools']),
+      fetchHpsts('GetSchoolNotifications', ['AppliesTo', 'School', 'AlertType', 'Reason']),
+    ]);
+
+    const alerts: SchoolBusAlert[] = [
+      ...schools.map((s): SchoolBusAlert => {
+        const name = String(s.School ?? '').trim();
+        const status = String(s.AlertType ?? '').trim();
+        return {
+          kind: 'school',
+          appliesTo: String(s.AppliesTo ?? ''),
+          title: name,
+          operator: '',
+          status,
+          cancelled: /closed|cancel/i.test(status),
+          schools: [name],
+          reason: String(s.Reason ?? '').replace(/\*/g, '').trim(),
+          postedAt: String(s.CreateTimeDisplay ?? ''),
+          nearListowel: NEAR_LISTOWEL.test(name),
+        };
+      }),
+      ...buses.map((b): SchoolBusAlert => {
+        const affected = [...splitSchools(b.AffectsSchools), ...splitSchools(b.TransfersSchools)];
+        const status = String(b.Action ?? '').trim();
+        return {
+          kind: 'bus',
+          appliesTo: String(b.AppliesTo ?? ''),
+          title: String(b.RouteRun ?? '').trim(),
+          operator: String(b.Operator ?? '').trim(),
+          status,
+          cancelled: /cancel/i.test(status),
+          schools: affected,
+          reason: String(b.Comment ?? '').trim(),
+          postedAt: String(b.CreateTimeDisplay ?? ''),
+          nearListowel: affected.some((x) => NEAR_LISTOWEL.test(x)),
+        };
+      }),
+    ];
+
+    const rank = (a: SchoolBusAlert) => (a.nearListowel ? 0 : 2) + (a.cancelled ? 0 : 1);
+    alerts.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
+    return { alerts, fetchedAt: new Date() };
+  } catch (err) {
+    console.warn('HPSTS school bus alerts unavailable:', err);
+    return null;
+  }
 }
 
 // Aircraft: Disabled simulated flights to preserve strict data integrity

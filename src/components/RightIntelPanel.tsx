@@ -34,6 +34,7 @@ import {
   RiverGaugeData,
   WeatherTelemetry,
 } from '../services/types';
+import { SchoolBusCard } from './SchoolBusCard';
 import {
   getMvcaWatershedBulletin,
   getWeatherAlerts,
@@ -683,6 +684,9 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                 <p className="text-[10px] text-slate-300/90 leading-relaxed">{alert.description}</p>
               </div>
             ))}
+
+            {/* School bus delays/cancellations (HPSTS) — weather-driven, so it lives with the weather */}
+            <SchoolBusCard />
 
             {/* Current Conditions Card */}
             {weather && (
