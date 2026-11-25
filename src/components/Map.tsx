@@ -887,16 +887,9 @@ export const MapView: React.FC<MapProps> = ({
 
     if (!layers.squall) return;
 
-    // Use calculated squall polygon or default Lake Huron -> Perth County streamer corridor
-    const polygonCoords =
-      squallTrajectory && squallTrajectory.streamerPolygon.length > 0
-        ? squallTrajectory.streamerPolygon
-        : [
-            [43.82, -81.72],
-            [43.66, -81.7],
-            [43.6, -80.85],
-            [43.85, -80.87],
-          ];
+    // Only draw a corridor when the squall model says one is active (no placeholder corridor)
+    if (!squallTrajectory?.isActive || squallTrajectory.streamerPolygon.length < 3) return;
+    const polygonCoords = squallTrajectory.streamerPolygon;
 
     const polygon = L.polygon(polygonCoords as L.LatLngExpression[], {
       color: '#38bdf8',
