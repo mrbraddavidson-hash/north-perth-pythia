@@ -217,7 +217,7 @@ export function App() {
         maritime: true,
         helipad: true,
         seismic: true,
-        drought: true,
+        drought: false,
         satellites: true,
       });
     } else if (preset === 'weather') {
@@ -234,7 +234,7 @@ export function App() {
         maritime: false,
         helipad: false,
         seismic: false,
-        drought: true,
+        drought: false,
         satellites: false,
       });
     } else if (preset === 'rivers') {
@@ -251,7 +251,7 @@ export function App() {
         maritime: false,
         helipad: true,
         seismic: false,
-        drought: true,
+        drought: false,
         satellites: false,
       });
     } else if (preset === 'airspace') {
