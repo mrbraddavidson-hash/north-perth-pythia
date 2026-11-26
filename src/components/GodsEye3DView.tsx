@@ -663,6 +663,27 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
         popup.on('open', () => {
           popup.setHTML(cameraPopupHtml(cam));
           stopLive = attachLiveCamera(popup.getElement(), cam);
+          // MapLibre popups don't auto-pan like Leaflet's; nudge the map so the snapshot isn't cut off.
+          // setHTML has already positioned the popup, so it can be measured right away. At a steep 3D tilt
+          // a pan doesn't move the marker by exactly the pixels asked, so check once more after it settles.
+          const keepPopupOnScreen = (retry: boolean) => {
+            const el = popup.getElement();
+            if (!el || !popup.isOpen()) return;
+            const box = map.getContainer().getBoundingClientRect();
+            const r = el.getBoundingClientRect();
+            const m = 12;
+            const bottomClear = window.innerWidth < 640 ? 64 : m; // phone toolbar along the bottom
+            let dx = 0;
+            let dy = 0;
+            if (r.left < box.left + m) dx = r.left - box.left - m;
+            else if (r.right > box.right - m) dx = r.right - box.right + m;
+            if (r.top < box.top + m) dy = r.top - box.top - m;
+            else if (r.bottom > box.bottom - bottomClear) dy = r.bottom - box.bottom + bottomClear;
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+            if (retry) map.once('moveend', () => keepPopupOnScreen(false));
+            map.panBy([dx, dy], { duration: 300 });
+          };
+          keepPopupOnScreen(true);
         });
         popup.on('close', () => stopLive());
         currentMarkers[id] = new maplibregl.Marker({ element: el })

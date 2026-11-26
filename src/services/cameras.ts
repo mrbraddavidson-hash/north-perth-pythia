@@ -695,6 +695,7 @@ export function cameraPopupHtml(cam: import('./types').TrafficCamera): string {
       </div>
       <div class="text-[11px] font-semibold text-white">${escapeHtml(cam.name)}</div>
       <div class="relative rounded overflow-hidden border border-slate-700 bg-slate-900 aspect-video">
+        <div data-cam-status class="absolute inset-0 flex items-center justify-center p-3 text-center text-[10px] text-slate-400">Loading snapshot…</div>
         <img data-cam-img src="${first ? `${snapshotUrl(first.id)}?t=${Date.now()}` : ''}" alt="${escapeHtml(cam.name)}" class="w-full h-full object-cover" loading="eager" />
         ${cam.distanceKm !== undefined ? `<div class="absolute top-1 left-1 text-[9px] bg-slate-950/85 px-1.5 py-0.5 text-slate-300 rounded border border-slate-700">${cam.distanceKm} km from Listowel</div>` : ''}
         <div data-cam-age class="absolute bottom-1 right-1 text-[9px] bg-black/85 px-1.5 py-0.5 text-cyan-300 rounded">Checking image time…</div>
@@ -729,17 +730,52 @@ export function attachLiveCamera(root: HTMLElement | null | undefined, cam: impo
   if (!container || !img || views.length === 0) return () => {};
 
   const ageEl = container.querySelector<HTMLElement>('[data-cam-age]');
+  const statusEl = container.querySelector<HTMLElement>('[data-cam-status]');
   const dirEl = container.querySelector<HTMLElement>('[data-cam-dir]');
   const linkEl = container.querySelector<HTMLAnchorElement>('[data-cam-link]');
   let viewId = views[0].id;
   let stopped = false;
+  let shownViewId: number | null = null; // view whose snapshot is currently on screen
+  let failures = 0;
+  let retryTimer: number | undefined;
+
+  // Say what's happening instead of leaving an empty dark box (a failed <img> renders blank on iOS)
+  const setStatus = (text: string | null) => {
+    if (!statusEl) return;
+    statusEl.textContent = text ?? '';
+    statusEl.style.display = text ? 'flex' : 'none';
+    img.style.visibility = text ? 'hidden' : 'visible';
+  };
+  const onLoaded = () => {
+    shownViewId = viewId;
+    failures = 0;
+    setStatus(null);
+  };
+  const onFailed = () => {
+    if (stopped) return;
+    failures += 1;
+    if (shownViewId === viewId) return; // keep the last good picture; the next refresh will try again
+    if (failures < 3) {
+      setStatus('Snapshot didn’t load. Retrying…');
+      window.clearTimeout(retryTimer);
+      retryTimer = window.setTimeout(() => void refresh(), 4000);
+    } else {
+      setStatus('Camera image unavailable right now. Try OPEN ON 511ON.CA below.');
+    }
+  };
 
   const refresh = async () => {
     const url = `${snapshotUrl(viewId)}?t=${Date.now()}`;
+    const requestedView = viewId;
     // Preload, then swap, so the image never flashes blank between refreshes
     const next = new Image();
     next.onload = () => {
-      if (!stopped) img.src = url;
+      if (stopped || requestedView !== viewId) return;
+      img.src = url;
+      onLoaded();
+    };
+    next.onerror = () => {
+      if (requestedView === viewId) onFailed();
     };
     next.src = url;
     try {
@@ -763,10 +799,16 @@ export function attachLiveCamera(root: HTMLElement | null | undefined, cam: impo
     if (dirEl && view) dirEl.textContent = view.description;
     if (linkEl) linkEl.href = `https://511on.ca/map/Cctv/${viewId}`;
     if (ageEl) ageEl.textContent = 'Loading…';
+    failures = 0;
+    window.clearTimeout(retryTimer);
+    setStatus('Loading snapshot…');
     void refresh();
   };
 
   container.addEventListener('click', onClick);
+  // The popup's own <img> may already have loaded (or failed) before we got here
+  if (img.complete && img.naturalWidth > 0) onLoaded();
+  else setStatus('Loading snapshot…');
   void refresh();
   const timer = window.setInterval(() => {
     if (!document.hidden) void refresh();
@@ -775,6 +817,7 @@ export function attachLiveCamera(root: HTMLElement | null | undefined, cam: impo
   return () => {
     stopped = true;
     window.clearInterval(timer);
+    window.clearTimeout(retryTimer);
     container.removeEventListener('click', onClick);
   };
 }
