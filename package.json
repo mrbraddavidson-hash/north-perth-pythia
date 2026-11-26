@@ -9,6 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@deck.gl/core": "~9.4.2",
+    "@deck.gl/geo-layers": "~9.4.2",
+    "@deck.gl/mapbox": "~9.4.2",
+    "@math.gl/core": "^4.1.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.61.0",
     "maplibre-gl": "^6.18.0",

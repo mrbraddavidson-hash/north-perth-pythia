@@ -20,6 +20,7 @@ import { SeismicEvent } from '../services/hazards';
 import { TargetSummary } from './TargetSummary';
 import { fetchEcccRadarTimes } from '../services/radar';
 import { RadarPrecipStatus } from './RadarPrecipStatus';
+import { GOOGLE_MAPS_KEY, attachGoogle3DTiles, Google3DTilesHandle } from '../services/google3dTiles';
 import type { TrafficCamera } from '../services/types';
 import { MilitaryFlight, CANADIAN_MILITARY_INSTALLATIONS } from '../services/godseye';
 import { MaritimeVessel } from '../services/maritime';
@@ -43,6 +44,7 @@ import {
   Pause,
   Lock,
   Unlock,
+  Building2,
 } from 'lucide-react';
 
 // Environment Canada 1 km radar, animated. Rain and snow are separate WMS layers (GeoMet allows one
@@ -97,6 +99,10 @@ const DROUGHT_TILES =
 
 const markerHtmlPopup = (html: string) =>
   new maplibregl.Popup({ offset: 16, maxWidth: '300px', className: 'hud-popup' }).setHTML(html);
+
+// Esri basemap layers swapped out while Google 3D tiles are on (Google's tiles replace the imagery and terrain)
+const ESRI_BASEMAP_LAYERS = ['satellite-layer', 'roads-layer', 'labels-layer'];
+const MAP_TERRAIN = { source: 'dem-terrain', exaggeration: 1.6 };
 
 const formatRadarTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit' });
@@ -154,6 +160,11 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
   const [isViewMenuOpen, setIsViewMenuOpen] = useState<boolean>(false);
   const [showTelemetry, setShowTelemetry] = useState<boolean>(false);
   const orbitReqRef = useRef<number | null>(null);
+
+  // Google Photorealistic 3D Tiles (only offered when a key is configured)
+  const [isGoogle3D, setIsGoogle3D] = useState<boolean>(false);
+  const [googleCredits, setGoogleCredits] = useState<string[]>([]);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   // Markers cache
   const markersRef = useRef<{ [id: string]: maplibregl.Marker }>({});
@@ -234,10 +245,7 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
             paint: { 'raster-opacity': 0.85 },
           },
         ],
-        terrain: {
-          source: 'dem-terrain',
-          exaggeration: 1.6,
-        },
+        terrain: MAP_TERRAIN,
         sky: {
           'sky-color': '#070a11',
           'sky-horizon-blend': 0.6,
@@ -843,6 +851,37 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
     }
   };
 
+  // Swap the Esri imagery + MapLibre terrain for Google's 3D tiles while the toggle is on
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!isGoogle3D || !map || !GOOGLE_MAPS_KEY) return;
+    let handle: Google3DTilesHandle | null = null;
+    let cancelled = false;
+
+    const enable = () => {
+      ESRI_BASEMAP_LAYERS.forEach((id) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', 'none'));
+      map.setTerrain(null);
+      attachGoogle3DTiles(map, GOOGLE_MAPS_KEY!, setGoogleCredits, setGoogleError)
+        .then((h) => {
+          if (cancelled) h.detach();
+          else handle = h;
+        })
+        .catch((err) => setGoogleError(String(err?.message ?? err)));
+    };
+    if (map.isStyleLoaded()) enable();
+    else map.once('load', enable);
+
+    return () => {
+      cancelled = true;
+      map.off('load', enable);
+      handle?.detach();
+      if (!mapRef.current) return; // map already removed
+      ESRI_BASEMAP_LAYERS.forEach((id) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', 'visible'));
+      map.setTerrain(MAP_TERRAIN);
+      setGoogleCredits([]);
+    };
+  }, [isGoogle3D]);
+
   return (
     <div className="relative w-full h-full overflow-hidden select-none bg-[#050c18]">
       {/* MapLibre 3D WebGL Canvas */}
@@ -880,6 +919,23 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
             <RotateCw className={`w-3 h-3 ${isOrbiting ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{isOrbiting ? 'ORBITING' : 'ORBIT'}</span>
           </button>
+          {GOOGLE_MAPS_KEY && (
+            <button
+              type="button"
+              onClick={() => {
+                setGoogleError(null);
+                setIsGoogle3D((v) => !v);
+              }}
+              aria-pressed={isGoogle3D}
+              className={`flex items-center gap-1 px-2 py-1 rounded border font-bold backdrop-blur-md cursor-pointer ${
+                isGoogle3D ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'bg-slate-950/90 text-cyan-300 border-cyan-500/50 hover:text-white'
+              }`}
+              title="Google photorealistic 3D buildings and terrain (replaces the satellite imagery; radar and drought tints are hidden under it)"
+            >
+              <Building2 className="w-3 h-3" />
+              <span className="hidden sm:inline">3D CITY</span>
+            </button>
+          )}
         </div>
         {isViewMenuOpen && (
           <div className="mt-1 w-44 rounded bg-slate-950/95 border border-cyan-500/50 backdrop-blur-md shadow-2xl overflow-hidden">
@@ -990,6 +1046,22 @@ export const GodsEye3DView: React.FC<GodsEye3DViewProps> = ({
               );
             }}
           />
+        </div>
+      )}
+
+      {/* GOOGLE 3D TILES ATTRIBUTION (required: "Google Maps" plus the providers of the tiles on screen) */}
+      {isGoogle3D && (
+        <div className="absolute bottom-[46px] sm:bottom-0 inset-x-0 z-30 flex justify-center px-2 sm:pr-10 pointer-events-none">
+          <div className="max-w-full truncate px-2 py-0.5 rounded-t bg-black/70 font-sans text-[10px] text-white" aria-label="Google Maps attribution">
+            {googleError ? (
+              <span className="text-amber-300">Google 3D tiles unavailable: {googleError}</span>
+            ) : (
+              <>
+                <span className="font-bold">Google Maps</span>
+                {googleCredits.length > 0 && <span className="text-slate-300"> · {googleCredits.join('; ')}</span>}
+              </>
+            )}
+          </div>
         </div>
       )}
 
