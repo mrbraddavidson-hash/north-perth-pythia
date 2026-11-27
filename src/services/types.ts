@@ -86,15 +86,31 @@ export interface RoadCondition {
   coords: [number, number][];
 }
 
+// One Hydro One outage (or group of outages at one spot) from the Storm Centre map, via /api/outages
 export interface HydroOutage {
-  id: string;
-  location: string;
   latitude: number;
   longitude: number;
-  customersAffected: number;
-  status: 'INVESTIGATING' | 'CREW_ASSIGNED' | 'CREW_ON_SITE' | 'RESOLVED';
-  cause: string;
-  estimatedRestoration: string;
+  customers: number;
+  customersIsEstimate: boolean; // Hydro One shows small counts as "fewer than N"; customers is then N
+  outageCount: number;
+  status: string | null;
+  cause: string | null;
+  estimatedRestoration: string | null;
+  startedAt: string | null;
+}
+
+export interface AirQualityReport {
+  location: string; // AQHI location the readings are for
+  current: number | null; // latest observed AQHI
+  observedAt: string | null;
+  specialNote: string | null;
+  forecast: { label: string; aqhi: number; inSmoke: number | null }[]; // Today / Tonight / Tomorrow…
+}
+
+export interface HydroOutageReport {
+  outages: HydroOutage[];
+  updatedAt: string | null;
+  checkedAt: string;
 }
 
 export interface LiveIncidentEvent {

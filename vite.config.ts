@@ -38,6 +38,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/hpsts/, ''),
       },
+      // These two do their work inside Pages Functions (tile walking, RSS parsing), so in dev they use the
+      // deployed functions; run `wrangler pages dev dist` to test local changes to them.
+      '/api/outages': { target: 'https://north-perth-pythia.pages.dev', changeOrigin: true },
+      '/api/burn-status': { target: 'https://north-perth-pythia.pages.dev', changeOrigin: true },
       '/api/511': {
         target: 'https://511on.ca',
         changeOrigin: true,

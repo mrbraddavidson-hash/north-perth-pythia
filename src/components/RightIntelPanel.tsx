@@ -35,6 +35,9 @@ import {
   WeatherTelemetry,
 } from '../services/types';
 import { SchoolBusCard } from './SchoolBusCard';
+import { BurnStatusCard } from './BurnStatusCard';
+import { PowerOutagesCard } from './PowerOutagesCard';
+import { AirQualityCard } from './AirQualityCard';
 import {
   getMvcaWatershedBulletin,
   getWeatherAlerts,
@@ -43,7 +46,6 @@ import {
   calculateSprayWindow,
   fetchLiveSoilTelemetry,
   fetchLiveCommodities,
-  getBurnPermitStatus,
   fetchLiveChuData,
   fetchLiveUsdCadRate,
   calculateCashGrain,
@@ -149,7 +151,6 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   const dairyStress: LivestockStressTelemetry | null = weather
     ? calculateDairyHeatStress(weather.temperatureC, weather.humidityPercent)
     : null;
-  const burnStatus = getBurnPermitStatus();
   const mvca = getMvcaWatershedBulletin(riverGauges);
   const weatherAlerts = getWeatherAlerts(weather);
 
@@ -475,16 +476,8 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               )}
             </div>
 
-            {/* 6. Rural Open-Air Burn Permits */}
-            <div className="p-2.5 rounded bg-slate-900/90 border border-slate-800 flex items-center justify-between text-[10px]">
-              <div className="flex items-center gap-1.5">
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-slate-200">Rural Burn Permits (Elma & Wallace):</span>
-              </div>
-              <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">
-                PERMITTED
-              </span>
-            </div>
+            {/* 6. Open-air fire ban status (North Perth notices) */}
+            <BurnStatusCard />
           </div>
         )}
 
@@ -687,6 +680,12 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
 
             {/* School bus delays/cancellations (HPSTS) — weather-driven, so it lives with the weather */}
             <SchoolBusCard />
+
+            {/* Hydro One outages around North Perth */}
+            <PowerOutagesCard onFlyToCoord={onFlyToCoord} />
+
+            {/* Environment Canada air quality (smoke, ozone, particles) */}
+            <AirQualityCard />
 
             {/* Current Conditions Card */}
             {weather && (

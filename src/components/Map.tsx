@@ -5,7 +5,6 @@ import {
   RiverGaugeData,
   TrafficCamera,
   RoadCondition,
-  HydroOutage,
   ActiveLayers,
   LiveIncidentEvent,
 } from '../services/types';

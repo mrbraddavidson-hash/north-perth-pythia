@@ -183,19 +183,27 @@ export async function fetchLiveCommodities(): Promise<CommodityFuture[]> {
   }
 }
 
-// 4. Burn permit status (North Perth Fire Department)
-export interface BurnPermitStatus {
-  status: 'PERMITS_ACTIVE' | 'HIGH_HAZARD_ADVISORY' | 'TOTAL_BURN_BAN';
-  message: string;
-  allowedUntil: string;
+// 4. Open-air fire ban status, from North Perth's own ban/lift notices (via /api/burn-status)
+export interface BurnBanStatus {
+  // BAN: the newest notice declares a ban. NO_BAN: the newest notice lifts one. NO_NOTICE: none found.
+  status: 'BAN' | 'NO_BAN' | 'NO_NOTICE';
+  notice: { title: string; link: string; date: string } | null;
+  checkedAt: string;
 }
 
-export function getBurnPermitStatus(): BurnPermitStatus {
-  return {
-    status: 'PERMITS_ACTIVE',
-    message: 'Open-air agricultural burning permitted in rural Elma and Wallace wards with valid permit.',
-    allowedUntil: 'Daily 2 hours before sunset',
-  };
+export const NORTH_PERTH_BURN_PERMITS_URL =
+  'https://www.northperth.ca/municipal-government/applications-licences-and-permits/burn-permits/';
+export const NORTH_PERTH_FIRE_PHONE = '519-291-2950';
+
+export async function fetchBurnBanStatus(): Promise<BurnBanStatus | null> {
+  try {
+    const res = await fetch('/api/burn-status');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.status ? (data as BurnBanStatus) : null;
+  } catch {
+    return null;
+  }
 }
 
 // 5. Ontario Crop Heat Units (CHU) & Growing Degree Days (GDD)

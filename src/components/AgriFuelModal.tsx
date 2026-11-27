@@ -23,7 +23,6 @@ import {
   calculateSprayWindow,
   fetchLiveSoilTelemetry,
   fetchLiveCommodities,
-  getBurnPermitStatus,
   fetchLiveChuData,
   fetchLiveUsdCadRate,
   calculateCashGrain,
@@ -35,6 +34,7 @@ import {
   OntarioElevatorPreset,
 } from '../services/agri';
 import { WeatherTelemetry } from '../services/types';
+import { BurnStatusCard } from './BurnStatusCard';
 
 interface AgriFuelModalProps {
   isOpen: boolean;
@@ -99,7 +99,6 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
   const sprayInfo: SprayCondition | null = weather
     ? calculateSprayWindow(weather.temperatureC, weather.humidityPercent, weather.windSpeedKmh)
     : null;
-  const burnStatus = getBurnPermitStatus();
 
   // Selected crop parameters for basis
   const cropConfig = {
@@ -287,25 +286,8 @@ export const AgriFuelModal: React.FC<AgriFuelModalProps> = ({
                 </div>
               )}
 
-              {/* Burn Permit Card */}
-              <div className="p-4 rounded border border-slate-800 bg-slate-900/40">
-                <div className="flex items-center gap-2 mb-2">
-                  <Flame className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-tactical font-bold tracking-wider text-slate-300">
-                    NORTH PERTH FIRE DEPT // OPEN AIR BURN STATUS
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-emerald-400">
-                    {burnStatus.status.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mb-2">{burnStatus.message}</p>
-                <div className="text-[11px] text-slate-500">
-                  Permitted Hours: <span className="text-slate-300">{burnStatus.allowedUntil}</span>
-                </div>
-              </div>
+              {/* Open-air fire ban status (North Perth notices) */}
+              <BurnStatusCard variant="card" />
             </div>
           )}
 

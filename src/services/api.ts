@@ -6,7 +6,8 @@ import {
   HourlyForecastItem,
   TrafficCamera,
   RoadCondition,
-  HydroOutage,
+  HydroOutageReport,
+  AirQualityReport,
   EmergencyDispatch,
   SchoolBusAlert,
   SchoolBusStatus,
@@ -659,9 +660,55 @@ export function getRoadConditions(): RoadCondition[] {
   return [];
 }
 
-// Hydro One Outages: Disabled simulated outages to preserve strict data integrity
-export function getHydroOutages(): HydroOutage[] {
-  return [];
+// Environment Canada Air Quality Health Index. Kitchener (49 km) is the nearest AQHI location to Listowel;
+// the GeoMet OGC API sends CORS headers, so it's called directly.
+const AQHI_API = 'https://api.weather.gc.ca/collections';
+export const AQHI_LOCATION = { id: 'FEBWC', name: 'Kitchener' };
+
+export async function fetchAirQuality(): Promise<AirQualityReport | null> {
+  try {
+    const q = `f=json&location_id=${AQHI_LOCATION.id}`;
+    const [obsRes, fcRes] = await Promise.all([
+      fetch(`${AQHI_API}/aqhi-observations-realtime/items?${q}&latest=true&limit=1`),
+      // Environment Canada's own Today / Tonight / Tomorrow forecast, newest issue
+      fetch(`${AQHI_API}/aqhi-forecasts-realtime/items?${q}&aqhi_type=AQHI-Forecast-Period&sortby=-publication_datetime&limit=1`),
+    ]);
+    if (!obsRes.ok && !fcRes.ok) return null;
+    const obs = obsRes.ok ? (await obsRes.json())?.features?.[0]?.properties : null;
+    const periods = fcRes.ok ? (await fcRes.json())?.features?.[0]?.properties?.forecast_period : null;
+
+    const forecast = Object.keys(periods ?? {})
+      .sort()
+      .map((k) => periods[k])
+      .filter((p) => p && typeof p.aqhi === 'number')
+      .map((p) => ({ label: String(p.forecast_period_en), aqhi: p.aqhi as number, inSmoke: typeof p.aqhi_insmoke === 'number' ? p.aqhi_insmoke : null }));
+
+    const current = obs && typeof obs.aqhi === 'number' ? Math.round(obs.aqhi * 10) / 10 : null;
+    if (current === null && forecast.length === 0) return null;
+    return {
+      location: AQHI_LOCATION.name,
+      current,
+      observedAt: obs?.observation_datetime ?? null,
+      specialNote: obs?.special_notes_en || null,
+      forecast,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Hydro One outages around North Perth (Storm Centre map data, via /api/outages)
+export const HYDRO_ONE_OUTAGE_MAP_URL = 'https://stormcentre.hydroone.com/';
+
+export async function fetchHydroOutages(): Promise<HydroOutageReport | null> {
+  try {
+    const res = await fetch('/api/outages');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data?.outages) ? (data as HydroOutageReport) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Emergency dispatches: Disabled simulated CAD calls to preserve strict data integrity
@@ -816,18 +863,18 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
       alerts.push({
         id: 'squall-huron',
         type: 'WARNING' as const,
-        title: 'LAKE HURON SNOW SQUALL WARNING',
+        title: 'LAKE HURON SNOW SQUALL RISK: HIGH',
         severity: 'CRITICAL' as const,
-        issuedTime: 'ECCC BULLETIN',
+        issuedTime: 'LOCAL ESTIMATE',
         description: `Direct northwest/west fetch off Lake Huron targeting the Highway 23 and Highway 86 corridors. Rapidly deteriorating visibility, localized whiteouts, and heavy squall banding expected across North Perth.`,
       });
     } else if (isWindFromHuron && weather.windSpeedKmh >= 20 && weather.temperatureC <= 3) {
       alerts.push({
         id: 'squall-watch',
         type: 'WATCH' as const,
-        title: 'LAKE HURON SQUALL WATCH',
+        title: 'LAKE HURON SQUALL RISK',
         severity: 'ELEVATED' as const,
-        issuedTime: 'ECCC BULLETIN',
+        issuedTime: 'LOCAL ESTIMATE',
         description: `Atmospheric instabiity favorable for streamer bands crossing Huron County into Northern Perth (Listowel, Gowanstown, Atwood).`,
       });
     }
@@ -837,7 +884,7 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
       alerts.push({
         id: 'wind-warn',
         type: 'WARNING' as const,
-        title: `HIGH WIND WARNING // GUSTS ${weather.windGustsKmh} KM/H`,
+        title: `DAMAGING GUSTS // ${weather.windGustsKmh} KM/H`,
         severity: 'CRITICAL' as const,
         issuedTime: 'NORTH PERTH OBS',
         description: `Hazardous crosswinds on rural concessions (Line 86, Line 84). High-profile transport trucks on Hwy 23 advised to exercise extreme caution.`,
@@ -853,6 +900,30 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
       });
     }
 
+    // Crop frost risk from the next two nights' forecast lows, during the growing season (Apr–Oct).
+    // Frost can form on crops in low spots with air temperatures a couple of degrees above zero.
+    const month = Number(new Date().toLocaleDateString('en-CA', { month: 'numeric', timeZone: 'America/Toronto' }));
+    const nights = (weather.dailyForecast ?? []).slice(1, 3);
+    const coldest = nights.reduce<(typeof nights)[number] | null>((m, d) => (!m || d.tempMinC < m.tempMinC ? d : m), null);
+    if (month >= 4 && month <= 10 && coldest && coldest.tempMinC <= 2) {
+      const when = new Date(`${coldest.date}T12:00:00`).toLocaleDateString('en-CA', { weekday: 'long' });
+      const low = coldest.tempMinC;
+      const level =
+        low <= -2
+          ? { title: 'HARD FREEZE', severity: 'CRITICAL' as const, advice: 'Expect damage to tender crops and blossoms; protect what you can and drain exposed lines.' }
+          : low <= 0
+            ? { title: 'FROST LIKELY', severity: 'ELEVATED' as const, advice: 'Frost likely on crops and low ground; cover sensitive plants and check livestock water.' }
+            : { title: 'FROST POSSIBLE', severity: 'INFO' as const, advice: 'Patchy frost possible in low-lying fields on a clear, calm night.' };
+      alerts.push({
+        id: 'crop-frost',
+        type: 'ADVISORY' as const,
+        title: `${level.title} // LOW ${low}°C ${when.toUpperCase()} MORNING`,
+        severity: level.severity,
+        issuedTime: 'FORECAST',
+        description: level.advice,
+      });
+    }
+
     // Freeze Advisory
     if (weather.temperatureC <= 0) {
       alerts.push({
@@ -860,7 +931,7 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
         type: 'SPECIAL_STATEMENT' as const,
         title: 'SUB-ZERO ROAD SURFACE ADVISORY',
         severity: 'ELEVATED' as const,
-        issuedTime: 'COUNTY ROAD ADVISORY',
+        issuedTime: 'LOCAL ESTIMATE',
         description: `Sub-zero temperatures (${weather.temperatureC}°C). Black ice formation risk on un-salted bridge decks (Wallace Ave, Maitland crossings).`,
       });
     }
@@ -870,10 +941,10 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
     alerts.push({
       id: 'all-clear',
       type: 'NORMAL' as const,
-      title: 'NO ACTIVE SEVERE WEATHER WATCHES',
+      title: 'NO SEVERE CONDITIONS IN LOCAL READINGS',
       severity: 'INFO' as const,
-      issuedTime: 'ENVIRONMENT CANADA',
-      description: 'Atmospheric conditions over Northern Perth County are stable. No weather warnings or special weather statements in effect.',
+      issuedTime: 'LOCAL READINGS',
+      description: 'Current readings and the 3-day forecast for North Perth show nothing severe. Official warnings come from Environment Canada (weather.gc.ca).',
     });
   }
 
