@@ -9,6 +9,9 @@ import {
   HydroOutageReport,
   AirQualityReport,
   EmergencyDispatch,
+  WeatherAlert,
+  MvcaNoticeReport,
+  MunicipalNoticesReport,
   SchoolBusAlert,
   SchoolBusStatus,
   LiveIncidentEvent,
@@ -711,6 +714,78 @@ export async function fetchHydroOutages(): Promise<HydroOutageReport | null> {
   }
 }
 
+// Environment Canada alerts covering Listowel (GeoMet OGC API, CORS enabled). A tiny box around the town
+// returns every alert area that contains it.
+export const ECCC_LOCATION_URL = 'https://weather.gc.ca/en/location/index.html?coords=43.732,-80.953';
+const ECCC_ALERTS_URL = 'https://api.weather.gc.ca/collections/weather-alerts/items?f=json&bbox=-80.96,43.728,-80.945,43.736&limit=50';
+
+const ECCC_TYPE: Record<string, WeatherAlert['type']> = {
+  warning: 'WARNING',
+  watch: 'WATCH',
+  advisory: 'ADVISORY',
+  statement: 'SPECIAL_STATEMENT',
+};
+
+export async function fetchEcccAlerts(): Promise<WeatherAlert[] | null> {
+  try {
+    const res = await fetch(ECCC_ALERTS_URL);
+    if (!res.ok) return null;
+    const features: any[] = (await res.json())?.features ?? [];
+    const now = Date.now();
+    const seen = new Set<string>();
+    const rank = { WARNING: 0, WATCH: 1, ADVISORY: 2, SPECIAL_STATEMENT: 3, NORMAL: 4 };
+    return features
+      .map((f) => f?.properties ?? {})
+      .filter((p) => p.status_en !== 'ended' && !(Date.parse(p.expiration_datetime) < now))
+      .filter((p) => {
+        // One alert can cover several overlapping areas
+        const key = `${p.alert_code}|${p.alert_type}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((p): WeatherAlert => {
+        const type = ECCC_TYPE[p.alert_type] ?? 'ADVISORY';
+        const issued = Date.parse(p.publication_datetime);
+        return {
+          id: `eccc-${p.alert_code}-${p.alert_type}`,
+          type,
+          title: String(p.alert_name_en ?? 'Environment Canada alert').toUpperCase(),
+          severity: type === 'WARNING' ? 'CRITICAL' : type === 'SPECIAL_STATEMENT' ? 'INFO' : 'ELEVATED',
+          issuedTime: Number.isNaN(issued)
+            ? 'ENVIRONMENT CANADA'
+            : `ECCC ${new Date(issued).toLocaleString('en-CA', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto' })}`,
+          source: 'ECCC',
+          description: String(p.alert_text_en ?? '').trim(),
+          link: ECCC_LOCATION_URL,
+        };
+      })
+      .sort((x, y) => rank[x.type] - rank[y.type]);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchJsonOrNull<T>(url: string, valid: (d: any) => boolean): Promise<T | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return valid(data) ? (data as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Latest Maitland Valley Conservation Authority flood message (via /api/mvca-notice)
+export const MVCA_FLOOD_NOTICES_URL = 'https://mvca.on.ca/water-management/flood-notices/';
+export const fetchMvcaNotice = () => fetchJsonOrNull<MvcaNoticeReport>('/api/mvca-notice', (d) => typeof d?.current === 'boolean');
+
+// North Perth road / water / construction notices (via /api/municipal-notices)
+export const NORTH_PERTH_NEWS_URL = 'https://www.northperth.ca/news';
+export const fetchMunicipalNotices = () =>
+  fetchJsonOrNull<MunicipalNoticesReport>('/api/municipal-notices', (d) => Array.isArray(d?.notices));
+
 // Emergency dispatches: Disabled simulated CAD calls to preserve strict data integrity
 export function getEmergencyDispatches(): EmergencyDispatch[] {
   return [];
@@ -815,46 +890,10 @@ export function getFallbackRiverGauges(): RiverGaugeData[] {
   return [];
 }
 
-// 9. Maitland Valley Conservation Authority (MVCA) Watershed Assessment
-export function getMvcaWatershedBulletin(riverGauges: RiverGaugeData[]) {
-  const mainGauge = riverGauges.find((g) => g.stationId === '02FE003') || riverGauges[0];
-  const level = mainGauge ? mainGauge.waterLevelMeters : 6.8;
-
-  let status: 'NORMAL' | 'CONDITIONS_STATEMENT' | 'FLOOD_WATCH' | 'FLOOD_WARNING' = 'NORMAL';
-  let headline = 'WATERSHED CONDITIONS NORMAL // MAITLAND VALLEY';
-  let risk: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' = 'LOW';
-  let details = 'Middle Maitland River and tributaries within typical seasonal baseflows. No significant snowmelt runoff or convective surcharge detected.';
-
-  if (level > 8.5) {
-    status = 'FLOOD_WARNING';
-    headline = 'MVCA FLOOD WARNING // MIDDLE MAITLAND BASIN';
-    risk = 'CRITICAL';
-    details = `Middle Maitland gauge near Listowel recorded ${level.toFixed(2)}m (Critical stage). Overbank flooding expected in low-lying farmland, Maitland Conservation areas, and Listowel town dyke reach.`;
-  } else if (level > 7.8) {
-    status = 'FLOOD_WATCH';
-    headline = 'MVCA FLOOD WATCH // LISTOWEL & TROWBRIDGE';
-    risk = 'HIGH';
-    details = `Middle Maitland level elevated at ${level.toFixed(2)}m. Water levels approaching bankfull. Surcharge possible along Road 164 bridge and low municipal crossings.`;
-  } else if (level > 7.2) {
-    status = 'CONDITIONS_STATEMENT';
-    headline = 'MVCA WATERSHED CONDITIONS STATEMENT // WATER SAFETY';
-    risk = 'MODERATE';
-    details = `Moderate river flow increases (${level.toFixed(2)}m). Fast flowing water and slippery banks. Residents advised to stay clear of river edges.`;
-  }
-
-  return {
-    status,
-    headline,
-    issuedDate: new Date().toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }),
-    middleMaitlandRisk: risk,
-    details,
-    activeWatercourse: 'Middle Maitland River (Sub-basin 02FE)',
-  };
-}
-
-// 10. Real-time Weather & Lake-Effect Squall Warnings for Northern Perth
-export function getWeatherAlerts(weather: WeatherTelemetry | null) {
-  const alerts = [];
+// Weather alerts: Environment Canada's official alerts first (null = couldn't be fetched), then this site's own
+// estimates from local readings (squall risk, gusts, frost, freezing surfaces), which are labelled as such.
+export function getWeatherAlerts(weather: WeatherTelemetry | null, official: WeatherAlert[] | null): WeatherAlert[] {
+  const alerts: WeatherAlert[] = [];
 
   if (weather) {
     // Lake Huron Squall Detection logic
@@ -866,6 +905,7 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
         title: 'LAKE HURON SNOW SQUALL RISK: HIGH',
         severity: 'CRITICAL' as const,
         issuedTime: 'LOCAL ESTIMATE',
+        source: 'LOCAL' as const,
         description: `Direct northwest/west fetch off Lake Huron targeting the Highway 23 and Highway 86 corridors. Rapidly deteriorating visibility, localized whiteouts, and heavy squall banding expected across North Perth.`,
       });
     } else if (isWindFromHuron && weather.windSpeedKmh >= 20 && weather.temperatureC <= 3) {
@@ -875,6 +915,7 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
         title: 'LAKE HURON SQUALL RISK',
         severity: 'ELEVATED' as const,
         issuedTime: 'LOCAL ESTIMATE',
+        source: 'LOCAL' as const,
         description: `Atmospheric instabiity favorable for streamer bands crossing Huron County into Northern Perth (Listowel, Gowanstown, Atwood).`,
       });
     }
@@ -887,6 +928,7 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
         title: `DAMAGING GUSTS // ${weather.windGustsKmh} KM/H`,
         severity: 'CRITICAL' as const,
         issuedTime: 'NORTH PERTH OBS',
+        source: 'LOCAL' as const,
         description: `Hazardous crosswinds on rural concessions (Line 86, Line 84). High-profile transport trucks on Hwy 23 advised to exercise extreme caution.`,
       });
     } else if (weather.windGustsKmh >= 45) {
@@ -896,6 +938,7 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
         title: `ELEVATED GUSTS (${weather.windGustsKmh} KM/H)`,
         severity: 'INFO' as const,
         issuedTime: 'NORTH PERTH OBS',
+        source: 'LOCAL' as const,
         description: `Brisk surface gusts across open Perth farmland. Minor agricultural drift risk.`,
       });
     }
@@ -920,6 +963,7 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
         title: `${level.title} // LOW ${low}°C ${when.toUpperCase()} MORNING`,
         severity: level.severity,
         issuedTime: 'FORECAST',
+        source: 'LOCAL' as const,
         description: level.advice,
       });
     }
@@ -932,27 +976,40 @@ export function getWeatherAlerts(weather: WeatherTelemetry | null) {
         title: 'SUB-ZERO ROAD SURFACE ADVISORY',
         severity: 'ELEVATED' as const,
         issuedTime: 'LOCAL ESTIMATE',
+        source: 'LOCAL' as const,
         description: `Sub-zero temperatures (${weather.temperatureC}°C). Black ice formation risk on un-salted bridge decks (Wallace Ave, Maitland crossings).`,
       });
     }
   }
 
+  if (official?.length) return [...official, ...alerts];
   if (alerts.length === 0) {
-    alerts.push({
-      id: 'all-clear',
-      type: 'NORMAL' as const,
-      title: 'NO SEVERE CONDITIONS IN LOCAL READINGS',
-      severity: 'INFO' as const,
-      issuedTime: 'LOCAL READINGS',
-      description: 'Current readings and the 3-day forecast for North Perth show nothing severe. Official warnings come from Environment Canada (weather.gc.ca).',
-    });
+    alerts.push(
+      official
+        ? {
+            id: 'all-clear',
+            type: 'NORMAL',
+            title: 'NO ENVIRONMENT CANADA ALERTS FOR NORTH PERTH',
+            severity: 'INFO',
+            issuedTime: 'ENVIRONMENT CANADA',
+            source: 'ECCC',
+            description: 'No warnings, watches, advisories or statements in effect, and nothing severe in local readings.',
+            link: ECCC_LOCATION_URL,
+          }
+        : {
+            id: 'all-clear',
+            type: 'NORMAL',
+            title: 'NO SEVERE CONDITIONS IN LOCAL READINGS',
+            severity: 'INFO',
+            issuedTime: 'LOCAL READINGS',
+            source: 'LOCAL',
+            description: "Couldn't reach Environment Canada's alerts just now. Local readings show nothing severe; check weather.gc.ca for official warnings.",
+            link: ECCC_LOCATION_URL,
+          },
+    );
   }
 
   return alerts;
 }
 
-// 11. Perth County & North Perth Municipal Public Works Notices (Empty to prevent fabricating municipal maintenance schedules)
-export function getMunicipalNotices(): any[] {
-  return [];
-}
 

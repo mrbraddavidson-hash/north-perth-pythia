@@ -176,13 +176,19 @@ export interface ActiveLayers {
 
 export type OpticMode = 'normal' | 'flir' | 'nvg' | 'crt';
 
-export interface MvcaWatershedBulletin {
-  status: 'NORMAL' | 'CONDITIONS_STATEMENT' | 'FLOOD_WATCH' | 'FLOOD_WARNING';
-  headline: string;
-  issuedDate: string;
-  middleMaitlandRisk: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
-  details: string;
-  activeWatercourse: string;
+// Latest Maitland Valley Conservation Authority flood message, via /api/mvca-notice
+export interface MvcaNotice {
+  title: string;
+  level: 'FLOOD_WARNING' | 'FLOOD_WATCH' | 'CONDITIONS_STATEMENT' | 'NOTICE';
+  link: string;
+  date: string;
+  expires: string | null;
+  summary: string;
+}
+
+export interface MvcaNoticeReport {
+  current: boolean; // the latest message is still in effect
+  notice: MvcaNotice | null;
 }
 
 export interface WeatherAlert {
@@ -192,15 +198,20 @@ export interface WeatherAlert {
   severity: 'CRITICAL' | 'ELEVATED' | 'INFO';
   issuedTime: string;
   description: string;
+  source: 'ECCC' | 'LOCAL'; // Environment Canada alert, or this site's own estimate from readings
+  link?: string;
 }
 
+// North Perth road / water / construction notice, via /api/municipal-notices
 export interface MunicipalNotice {
-  id: string;
-  category: 'INFRASTRUCTURE' | 'ROAD_CLOSURE' | 'WATER_WORKS' | 'WINTER_PATROL';
   title: string;
-  location: string;
-  status: 'ACTIVE' | 'SCHEDULED' | 'ADVISORY';
+  category: 'WATER' | 'ROAD' | 'CONSTRUCTION' | 'PUBLIC_WORKS';
+  link: string;
   date: string;
-  details: string;
+  summary: string;
 }
 
+export interface MunicipalNoticesReport {
+  notices: MunicipalNotice[];
+  windowDays: number;
+}

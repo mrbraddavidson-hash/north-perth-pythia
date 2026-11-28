@@ -38,10 +38,10 @@ import { SchoolBusCard } from './SchoolBusCard';
 import { BurnStatusCard } from './BurnStatusCard';
 import { PowerOutagesCard } from './PowerOutagesCard';
 import { AirQualityCard } from './AirQualityCard';
-import {
-  getMvcaWatershedBulletin,
-  getWeatherAlerts,
-} from '../services/api';
+import { MvcaNoticeBlock } from './MvcaNoticeBlock';
+import { MunicipalNoticesCard } from './MunicipalNoticesCard';
+import { fetchEcccAlerts, getWeatherAlerts } from '../services/api';
+import { usePolled } from '../hooks/usePolled';
 import {
   calculateSprayWindow,
   fetchLiveSoilTelemetry,
@@ -151,8 +151,8 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
   const dairyStress: LivestockStressTelemetry | null = weather
     ? calculateDairyHeatStress(weather.temperatureC, weather.humidityPercent)
     : null;
-  const mvca = getMvcaWatershedBulletin(riverGauges);
-  const weatherAlerts = getWeatherAlerts(weather);
+  const { data: ecccAlerts } = usePolled(fetchEcccAlerts, 10 * 60 * 1000);
+  const weatherAlerts = getWeatherAlerts(weather, ecccAlerts);
 
   // Commodity futures lookup
   const cornFuture = commodities.find((c) => c.symbol === 'ZC=F');
@@ -660,9 +660,11 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
               <div
                 key={alert.id}
                 className={`p-2.5 rounded border ${
-                  alert.severity === 'CRITICAL'
-                    ? 'bg-rose-950/60 border-rose-500/80 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.3)] animate-pulse'
-                    : 'bg-amber-950/50 border-amber-500/70 text-amber-200'
+                  alert.type === 'NORMAL'
+                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
+                    : alert.severity === 'CRITICAL'
+                      ? 'bg-rose-950/60 border-rose-500/80 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.3)] animate-pulse'
+                      : 'bg-amber-950/50 border-amber-500/70 text-amber-200'
                 }`}
               >
                 <div className="flex items-center justify-between font-bold text-[11px] mb-1">
@@ -674,7 +676,25 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
                     {alert.issuedTime}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-300/90 leading-relaxed">{alert.description}</p>
+                <p className={`text-[10px] text-slate-300/90 leading-relaxed whitespace-pre-line ${alert.source === 'ECCC' ? 'line-clamp-6' : ''}`}>
+                  {alert.description}
+                </p>
+                <div className="mt-1 flex items-center justify-between text-[9px]">
+                  <span className="text-slate-500">
+                    {alert.type === 'NORMAL'
+                      ? alert.source === 'ECCC'
+                        ? 'Checked against Environment Canada'
+                        : 'Environment Canada unreachable'
+                      : alert.source === 'ECCC'
+                        ? 'Official Environment Canada alert'
+                        : 'Site estimate from local readings, not an official alert'}
+                  </span>
+                  {alert.link && (
+                    <a href={alert.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-cyan-400 hover:text-cyan-300">
+                      {alert.source === 'ECCC' && alert.type !== 'NORMAL' ? 'Full alert' : 'weather.gc.ca'} <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
 
@@ -686,6 +706,9 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
 
             {/* Environment Canada air quality (smoke, ozone, particles) */}
             <AirQualityCard />
+
+            {/* North Perth road, water and construction notices */}
+            <MunicipalNoticesCard />
 
             {/* Current Conditions Card */}
             {weather && (
@@ -775,17 +798,7 @@ export const RightIntelPanel: React.FC<RightIntelPanelProps> = ({
 
             {/* Maitland Valley Watershed & Tile Drainage Gauge */}
             <div className="p-3 rounded bg-slate-900/90 border border-cyan-500/40 shadow-sm space-y-2">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-xs text-white">
-                  <Waves className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>MAITLAND VALLEY (MVCA)</span>
-                </div>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-emerald-950 text-emerald-400 border-emerald-500/40">
-                  {mvca.status.replace('_', ' ')}
-                </span>
-              </div>
-              <div className="text-[11px] font-semibold text-cyan-300">{mvca.headline}</div>
-              <p className="text-[10px] text-slate-300 leading-relaxed">{mvca.details}</p>
+              <MvcaNoticeBlock />
 
               {/* Water Levels for drainage monitoring */}
               <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[10px]">
